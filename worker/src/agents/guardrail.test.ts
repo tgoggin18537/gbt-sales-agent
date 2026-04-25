@@ -582,6 +582,78 @@ const CASES: Case[] = [
     expect: { ok: true },
   },
 
+  // ---- SPIFFY V2 BANNED PHRASES ----
+  {
+    name: 'bans: limited time offer',
+    candidate: "limited time offer on Punta Cana packages this week",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'ALLOWS: similar but different (time is limited)',
+    candidate: "spots are going fast, availability is limited this time of year",
+    expect: { ok: true },
+  },
+  {
+    name: "bans: don't miss out",
+    candidate: "don't miss out on this deal",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: "ALLOWS: dont miss your group (not the banned phrase)",
+    candidate: "dont miss your group deadline, they fill up fast",
+    expect: { ok: true },
+  },
+  {
+    name: "bans: book now before it's too late",
+    candidate: "book now before it's too late",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: "ALLOWS: book now (standalone, no 'before it's too late')",
+    candidate: "just lmk when yall are ready to book, now or later is cool",
+    expect: { ok: true },
+  },
+  {
+    name: 'bans: thank you for your inquiry',
+    candidate: "thank you for your inquiry about spring break packages",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'ALLOWS: thanks for hitting me back',
+    candidate: "thanks for hitting me back, which week is your break?",
+    expect: { ok: true },
+  },
+  {
+    name: 'bans: we appreciate your interest',
+    candidate: "we appreciate your interest in our spring break packages",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'ALLOWS: appreciate you being real (not corporate phrase)',
+    candidate: "appreciate you being real with me about the budget",
+    expect: { ok: true },
+  },
+  {
+    name: 'bans: per our previous message',
+    candidate: "per our previous message, the deposit is $200",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'ALLOWS: as I mentioned previously (different phrase)',
+    candidate: "so like I mentioned, Punta Cana is usually the move for groups your size",
+    expect: { ok: true },
+  },
+  {
+    name: 'bans: kindly review',
+    candidate: "kindly review the package details I sent over",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'ALLOWS: review the options (not kindly review)',
+    candidate: "check out the options and lmk which one fits your group",
+    expect: { ok: true },
+  },
+
   // ---- LENGTH CAP ----
   {
     name: 'allows: 3-sentence Spiffy reply under cap',

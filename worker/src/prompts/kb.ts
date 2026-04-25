@@ -152,6 +152,24 @@ export const GBT_KB = {
   carrierBlockedPatterns: [] as string[],
 } as const;
 
+/**
+ * Plain-string list of phrases Spiffy must never use (sourced from
+ * spiffy-v2-spec.md section 4). Exported so the system prompt can
+ * reference them explicitly, making the model aware at inference time.
+ * The guardrail in agents/guardrail.ts enforces these as regex patterns.
+ */
+export const SPIFFY_BANNED_PHRASES: readonly string[] = [
+  // Overly salesy
+  'Limited time offer, act now',
+  "Don't miss out",
+  "Book now before it's too late",
+  // Robotic / corporate
+  'Thank you for your inquiry',
+  'We appreciate your interest in our services',
+  'Per our previous message',
+  'Kindly review the following',
+] as const;
+
 export function hasExistingCustomerTag(tags: string[] | undefined | null): boolean {
   if (!tags || tags.length === 0) return false;
   const lowered = tags.map((t) => t.toLowerCase());

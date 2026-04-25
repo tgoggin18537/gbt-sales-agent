@@ -69,6 +69,16 @@ const BANNED_PHRASES: RegExp[] = [
   /\bsorry,?\s+(?:about that|something|my last|that got)/i,
   /\b(my last message|what i said|let me try (that|again)|to recap what i said)\b/i,
   /\b(scrambled|glitched|got messed up|got cut off on my end|something went wrong on my end)\b/i,
+  // ---- SPIFFY V2 BANNED PHRASES (from spiffy-v2-spec.md section 4) ----
+  // Overly salesy / generic phrases that sound off-brand for Spiffy.
+  /\blimited time offer\b/i,
+  /\bdon'?t miss out\b/i,
+  /\bbook now before it'?s too late\b/i,
+  // Robotic / corporate phrasing.
+  /\bthank you for your inquiry\b/i,
+  /\bwe appreciate your interest\b/i,
+  /\bper our previous message\b/i,
+  /\bkindly review\b/i,
 ];
 
 // Real rep names that surface in the transcripts. Bot must never
