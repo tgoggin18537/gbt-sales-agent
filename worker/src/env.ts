@@ -4,6 +4,7 @@ export type Env = {
   GHL_LOCATION_ID: string;
   GHL_WEBHOOK_SECRET?: string;
   MIA_MODEL?: string;
+  SPIFFY_MODEL?: string;
   CONTACT_THREAD: DurableObjectNamespace;
   IDEMPOTENCY?: KVNamespace;
   DB?: D1Database;

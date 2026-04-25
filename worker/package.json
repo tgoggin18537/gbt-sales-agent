@@ -1,8 +1,8 @@
 {
-  "name": "llmd-mia-worker",
-  "version": "0.2.0",
+  "name": "gbt-spiffy-worker",
+  "version": "1.0.0",
   "private": true,
-  "description": "Mia, the Limitless Living MD SMS setter bot. Runs on Cloudflare Workers, driven by Claude.",
+  "description": "Spiffy, the Go Blue Tours / SpringBreak U SMS setter bot. Runs on Cloudflare Workers, driven by Claude.",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",

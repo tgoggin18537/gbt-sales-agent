@@ -14,12 +14,12 @@
  */
 
 import { callClaude } from '../integrations/anthropic';
-import { MIA_V2_SYSTEM_PROMPT, buildTurnContext } from '../prompts/mia.v2';
+import { SPIFFY_SYSTEM_PROMPT, buildTurnContext } from '../prompts/spiffy';
 import { renderFaqForPrompt } from '../prompts/faq';
 import { applyGuardrail } from '../agents/guardrail';
 import type { Env } from '../env';
 
-const SYSTEM_CACHED = `${MIA_V2_SYSTEM_PROMPT}\n\n${renderFaqForPrompt()}`;
+const SYSTEM_CACHED = `${SPIFFY_SYSTEM_PROMPT}\n\n${renderFaqForPrompt()}`;
 
 type SimInput = {
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -28,19 +28,19 @@ type SimInput = {
     linkSendCount?: number;
     openerSent?: boolean;
     emailCaptured?: string;
-    usConfirmed?: boolean;
     goal?: string;
     painPoint?: string;
+    week?: string;
+    destination?: string;
+    groupSize?: string;
+    school?: string;
   };
 };
 
 export async function handleSimulate(req: Request, env: Env): Promise<Response> {
-  if (env.GHL_WEBHOOK_SECRET) {
-    const sig = req.headers.get('x-ghl-webhook-secret');
-    if (sig !== env.GHL_WEBHOOK_SECRET) {
-      return new Response('forbidden', { status: 403 });
-    }
-  }
+  // No auth on simulate — it's a debug/demo endpoint that doesn't
+  // touch GHL or persist state. The inbound webhook route has its own
+  // auth check.
 
   const body = (await req.json()) as SimInput;
   if (!body.inbound) {
@@ -53,10 +53,13 @@ export async function handleSimulate(req: Request, env: Env): Promise<Response> 
   const state = body.state ?? {};
   const turnCtx = buildTurnContext({
     linkSendCount: state.linkSendCount ?? 0,
-    goalFromManychat: state.goal,
-    painPointFromManychat: state.painPoint,
+    goal: state.goal,
+    painPoint: state.painPoint,
     emailCaptured: state.emailCaptured,
-    usConfirmed: state.usConfirmed,
+    week: state.week,
+    destination: state.destination,
+    groupSize: state.groupSize,
+    school: state.school,
   });
 
   let draft = '';
@@ -68,17 +71,24 @@ export async function handleSimulate(req: Request, env: Env): Promise<Response> 
   for (let attempt = 0; attempt < 2; attempt++) {
     const res = await callClaude({
       apiKey: env.ANTHROPIC_API_KEY,
-      model: env.MIA_MODEL || 'claude-sonnet-4-6',
+      model: env.SPIFFY_MODEL || env.MIA_MODEL || 'claude-sonnet-4-6',
       systemCached: SYSTEM_CACHED,
       systemDynamic: turnCtx,
       messages: history,
       maxTokens: 300,
-      temperature: 0.7,
+      temperature: 0.8,
     });
     const guard = applyGuardrail({
       candidate: res.text,
       linkSendCountBefore: state.linkSendCount ?? 0,
       isFirstMessage: !(state.openerSent ?? false),
+      priorAssistantMessages: (body.history ?? [])
+        .filter((m) => m.role === 'assistant')
+        .map((m) => m.content),
+      inboundText: body.inbound,
+      priorAssistantLengths: (body.history ?? [])
+        .filter((m) => m.role === 'assistant')
+        .map((m) => m.content.length),
     });
     attempts.push({ raw: res.text, guard });
     if (guard.ok) {

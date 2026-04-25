@@ -23,24 +23,27 @@ import {
   sendSms,
   wasManualOutboundRecent,
 } from '../integrations/ghl';
-import { MIA_V2_SYSTEM_PROMPT, buildTurnContext } from '../prompts/mia.v2';
+import { SPIFFY_SYSTEM_PROMPT, buildTurnContext } from '../prompts/spiffy';
 import { renderFaqForPrompt } from '../prompts/faq';
 import { applyGuardrail } from '../agents/guardrail';
 import {
   classifyExistingPatient,
   extractEmail,
 } from '../agents/classifier';
-import { hasExistingPatientTag } from '../prompts/kb';
+import { hasExistingCustomerTag } from '../prompts/kb';
 import type { MiaState, MiaMessage } from '../memory/ContactThread';
 import type { Env } from '../env';
 
-const SHUTOFF_TAGS = ['do-not-message', 'human-takeover', 'call-booked', 'customer'];
+const SHUTOFF_TAGS = ['do-not-message', 'human-takeover', 'call-booked', 'customer', 'booked', 'traveler'];
 const ENGAGED_TAG = 'ai-bot-engaged';
 
+// Spiffy's cold opener. Single-message per Phase 2 decision (multi-bubble
+// split deferred to V2 infra upgrade). Pulled verbatim style from his
+// transcripts.
 const OPENER =
-  "Hey! This is Mia with Dr. Samuel B. Lee MD's office at Limitless Living MD. 🙂 Saw you were checking us out. What are you hoping to work on, weight loss, energy, sleep, recovery, something else?";
+  "What's good! It's Spiffy from SpringBreak U here. Which week is your spring break? I'll send over the options and deets";
 
-const SYSTEM_CACHED = `${MIA_V2_SYSTEM_PROMPT}\n\n${renderFaqForPrompt()}`;
+const SYSTEM_CACHED = `${SPIFFY_SYSTEM_PROMPT}\n\n${renderFaqForPrompt()}`;
 
 export async function handleInboundSms(req: Request, env: Env): Promise<Response> {
   const payload = (await req.json()) as any;
@@ -118,8 +121,8 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
     return Response.json({ skipped: 'manual_team_message_detected' });
   }
 
-  // ----- Existing patient checks (tag first, then classifier) -----
-  const tagBasedExisting = hasExistingPatientTag(tags);
+  // ----- Existing customer checks (tag first, then classifier) -----
+  const tagBasedExisting = hasExistingCustomerTag(tags);
   const isExisting =
     tagBasedExisting ||
     (await classifyExistingPatient(env.ANTHROPIC_API_KEY, inboundBody));
@@ -128,7 +131,7 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
       { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
       {
         contactId,
-        message: 'Got it, let me have someone from the team jump in with you here.',
+        message: 'aight bet, lemme have someone from our team jump in with you here',
       },
     );
     await addTag(
@@ -139,9 +142,9 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
     await addContactNote(
       { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
       contactId,
-      `[Mia] Existing-patient signal detected. Inbound: "${inboundBody}". Team action needed.`,
+      `[Spiffy] Existing-customer signal detected. Inbound: "${inboundBody}". Team action needed.`,
     );
-    return Response.json({ handled: 'existing_patient' });
+    return Response.json({ handled: 'existing_customer' });
   }
 
   // ----- Initial-touch short-circuit -----
@@ -174,10 +177,9 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
   // ----- Build Claude call -----
   const turnCtx = buildTurnContext({
     linkSendCount: state.linkSendCount,
-    goalFromManychat: state.goal,
-    painPointFromManychat: state.painPoint,
+    goal: state.goal,
+    painPoint: state.painPoint,
     emailCaptured: state.emailCaptured,
-    usConfirmed: state.usConfirmed,
   });
 
   const history = state.messages.map((m) => ({
@@ -194,7 +196,7 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const claudeRes = await callClaude({
       apiKey: env.ANTHROPIC_API_KEY,
-      model: env.MIA_MODEL || 'claude-sonnet-4-6',
+      model: env.SPIFFY_MODEL || env.MIA_MODEL || 'claude-sonnet-4-6',
       systemCached: SYSTEM_CACHED,
       systemDynamic: turnCtx,
       messages: history,
@@ -209,6 +211,10 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
       priorAssistantMessages: state.messages
         .filter((m) => m.role === 'assistant')
         .map((m) => m.content),
+      inboundText: inboundBody,
+      priorAssistantLengths: state.messages
+        .filter((m) => m.role === 'assistant')
+        .map((m) => m.content.length),
     });
 
     if (guard.ok) {
@@ -219,10 +225,11 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
       break;
     } else {
       attemptLog.push({ draft: claudeRes.text, reason: guard.reason });
-      // Nudge the model to retry with the reason.
+      // Nudge the model to retry with the reason + the original inbound
+      // so the LLM doesn't lose context of what the lead said.
       history.push({
         role: 'user',
-        content: `[system note] Your last draft violated a rule: ${guard.reason}. Rewrite following all rules. Keep it to one short reply, one question maximum. Do not repeat any goal-discovery question already asked earlier in the thread.`,
+        content: `[system note] Your last draft violated a rule: ${guard.reason}. Rewrite following all rules. Keep it to one short reply, one question maximum. Do not repeat any qualifier already asked twice. Respond to: "${inboundBody}"`,
       });
     }
   }
@@ -231,7 +238,7 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
     // Guardrail never passed after N attempts. Ship a safe static fallback
     // so the lead still gets a reply, and flag for human review with the
     // full draft history so we can diagnose.
-    const FALLBACK = "hmm good one, let me think on that real quick";
+    const FALLBACK = "hmm good one, lemme think on that real quick";
     const sentFallback = await sendSms(
       { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
       { contactId, message: FALLBACK },
@@ -247,7 +254,7 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
     await addContactNote(
       { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
       contactId,
-      `[Mia] Guardrail exhausted after ${maxAttempts} attempts. Sent fallback "${FALLBACK}". Inbound: "${inboundBody}".\nDrafts:\n${draftDump}`,
+      `[Spiffy] Guardrail exhausted after ${maxAttempts} attempts. Sent fallback "${FALLBACK}". Inbound: "${inboundBody}".\nDrafts:\n${draftDump}`,
     );
     // Persist the fallback to DO so it's in history going forward.
     await stub.fetch('https://do/append', {

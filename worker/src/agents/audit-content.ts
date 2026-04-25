@@ -6,7 +6,7 @@
  *   npx tsx worker/src/agents/audit-content.ts
  */
 
-import { FAQ, OBJECTIONS, GOAL_OPENERS } from '../prompts/faq';
+import { FAQ, OBJECTIONS, DESTINATION_REACTIONS } from '../prompts/faq';
 import { FOLLOWUPS } from '../prompts/followups';
 import { applyGuardrail } from './guardrail';
 
@@ -39,7 +39,7 @@ function audit(label: string, s: string) {
   if (s.length > 320) problems.push(`[CHARS] ${label}: ${s.length} chars\n  text: "${s}"`);
 }
 
-for (const [goal, msg] of Object.entries(GOAL_OPENERS)) audit(`GOAL_OPENER.${goal}`, msg);
+for (const [key, msg] of Object.entries(DESTINATION_REACTIONS)) audit(`DEST_REACTION.${key}`, msg);
 for (const e of FAQ) audit(`FAQ[${e.triggers[0]}]`, e.answer);
 for (const e of OBJECTIONS) audit(`OBJECTION[${e.triggers[0]}]`, e.answer);
 for (const [key, msg] of Object.entries(FOLLOWUPS)) audit(`FOLLOWUP.${key}`, msg);

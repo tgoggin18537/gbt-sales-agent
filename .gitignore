@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Secrets (never commit)
+.dev.vars
+.dev.vars.*
+.env
+.env.local
+
+# Node
+node_modules/
+
+# Wrangler
+.wrangler/
+
+# Claude Code worktrees
+.claude/worktrees/
+
+# Editor
+.vscode/
+.idea/

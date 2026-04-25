@@ -1,127 +1,223 @@
 /**
- * Post-processing guardrail applied to every outbound message before it
- * ships. Enforces formatting rules deterministically so the LLM cannot
- * regress on them.
+ * Spiffy bot post-processing guardrail.
  *
- *  - No dashes of any kind (em, en, hyphen-between-words). Replace with comma+space.
- *  - Name format: "Dr. Samuel B. Lee MD".
- *  - No emoji (emoji is only allowed in the opener, which the caller marks).
- *  - No banned opener phrases.
- *  - No named staff members.
- *  - Booking link only if budget not exhausted.
- *  - Soft length cap (3 sentences / 320 chars for an SMS).
+ * Applied to every outbound message before it ships. Enforces
+ * deterministic voice + formatting rules so the LLM cannot regress.
  *
- * Returns either a cleaned message or a regenerate signal with reasons.
+ * Rules relaxed for Spiffy (evidence-backed in phase 2):
+ *  - Lowercase message starts allowed (~40% of Spiffy's real msgs).
+ *  - Compound-question check is >=2 "?" marks only. The playbook's
+ *    two-clause-stem check is disabled — too many false positives
+ *    against Spiffy's "yall down for X or prefer Y?" style.
+ *  - "I understand" / "I hear you" / "happy to help" / "totally" are
+ *    allowed but SOFT-CAPPED at 1 per conversation via
+ *    priorAssistantMessages.
+ *  - Wellness-claim ban removed (not a wellness brand).
+ *
+ * Rules kept / added for Spiffy:
+ *  - No em/en/figure dashes; hyphens between letters softened.
+ *  - No emoji at all (opener included).
+ *  - No summary labels.
+ *  - No self-initiator framing ("reached out", "reaching out").
+ *  - No staff names: Vivian, Ashton, Alex, Aleesa, Tony, Justin
+ *    Rodriguez, Manuel.
+ *  - No hallucinated reservation links: the bot does NOT generate
+ *    /package/[CODE] URLs. If any secure.springbreaku.com URL appears,
+ *    reject so Spiffy's back-office can inject the real link.
+ *  - Banned openers: Great question, Absolutely, Thanks for reaching
+ *    out, Certainly, That's a great point, Short version, TL;DR, etc.
+ *  - Link budget: 2 per conversation.
+ *  - Length cap ~450 chars (3 SMS segments). Spiffy's median is much
+ *    shorter; cap is a safety net.
  */
 
 const BANNED_OPENERS = [
   /^\s*great question[!,.\s]/i,
   /^\s*absolutely[!,.\s]/i,
-  /^\s*totally[!,.\s]/i,
-  /^\s*i understand[!,.\s]/i,
-  /^\s*thanks for reaching out/i,
-  /^\s*that's a great point/i,
+  /^\s*that'?s a great point/i,
   /^\s*certainly[!,.\s]/i,
+  /^\s*thanks for reaching out/i,
+  // Summary labels as openers — also stripped mid-message below, but
+  // opener-position is an outright reject since it's an AI tell.
+  /^\s*short version\s*[:,]/i,
+  /^\s*quick version\s*[:,]/i,
+  /^\s*tl;?dr\b/i,
+  /^\s*in short,/i,
+  /^\s*to sum up,/i,
+  /^\s*long story short,/i,
+  /^\s*the short answer/i,
 ];
 
-// Phrases that sound templated or wrong in Mia's voice, regardless of position.
-// "Reach out" self-referential forms are banned because every lead is inbound
-// and Mia is never the initiator. We deliberately do NOT ban generic
-// "the specialist will reach out to you" since that describes workflow.
+// Phrases that sound templated or off-voice regardless of position.
+// Self-initiator framing: every lead filled a form, Spiffy is never the
+// initiator. Spiffy says "checkin in" for follow-ups, never "I wanted to
+// reach out".
 const BANNED_PHRASES: RegExp[] = [
   /\bwhat'?s on your radar\b/i,
   /\bwhat brings you here\b/i,
-  // Self-initiator framing in any conjugation/contraction:
-  //  "I/we [('ll|will|'m|am|'re|are|'ve|have|'d|would)] reach(ed|ing) out"
+  // "I/we [('ll|will|'m|am|'re|are|'ve|have|'d|would)] reach(ed|ing) out"
   /\b(I|we)(?:'ll|\s+will|'m|\s+am|'re|\s+are|'ve|\s+have|'d|\s+would)?\s+reach(?:ed|ing)?\s+out\b/i,
-  // "I/we (just) want(ed) to reach out" (catches non-contracted forms)
+  // "I/we (just) want(ed) to reach out"
   /\b(I|we)(?:\s+just)?\s+want(?:ed)?\s+to\s+reach\s+out\b/i,
-  // "just want(ed) to reach out / check in / follow up" without I/we anchor
+  // "just want(ed) to reach out / check in / follow up" (no I/we anchor)
   /\bjust\s+want(?:ed)?\s+to\s+(?:reach\s+out|check\s+in|follow\s+up)\b/i,
-  // "figured I'd reach out"
   /\bfigured\s+I'?d\s+reach\s+out\b/i,
   /\bthanks?\s+for\s+reaching\s+out\b/i,
 ];
 
+// Real rep names that surface in the transcripts. Bot must never
+// impersonate or route to them by name. See SPIFFY_V2_QUESTIONS.md to
+// expand.
 const STAFF_NAMES = [
-  'Danielle',
-  'Lauren',
-  'Emily',
-  'Christine',
-  'Nicole',
-  'Cloie',
-  'Janice',
-  'Erin',
+  'Vivian',
+  'Ashton',
+  'Alex',
+  'Aleesa',
+  'Tony',
+  'Justin Rodriguez',
+  'Manuel',
 ];
 
-// Wellness-claim phrases flagged by carriers (error 30007). Reject and regenerate.
-const WELLNESS_CLAIM_PATTERNS: RegExp[] = [
-  /you deserve to feel/i,
-  /clear,?\s*energized,?\s*and\s*balanced/i,
-  /feel like yourself again/i,
-  /reclaim your vitality/i,
-];
+const CANONICAL_NAME = 'Spiffy';
 
+// Name-format rule: Spiffy always signs as "Spiffy" in transcripts.
+// If the bot ever tries "Derrick" or his full name, normalize to
+// "Spiffy". Very cheap rewrite, never a reject.
 const NAME_VARIANTS = [
-  /Dr\.?\s+Samuel\s+Lee,?\s*M\.?D\b/gi,
-  /Dr\.?\s+Samuel\s+B\.?\s+Lee,?\s*M\.?D\b/gi,
-  /Dr\.?\s+Lee,?\s*M\.?D\b/gi,
+  /\bDerrick Spiffy Darko\b/g,
+  /\bDerrick Darko\b/g,
+  /\bDerrick\b/g,
 ];
 
-const CANONICAL_NAME = 'Dr. Samuel B. Lee MD';
+// The bot does NOT generate reservation-link codes. Any URL matching
+// the package format means the LLM hallucinated one. Reject so the
+// server / Spiffy injects a real link.
+const HALLUCINATED_LINK_PATTERN =
+  /secure\.springbreaku\.com\/site\/public\/package\/[A-Z0-9]+/i;
 
-const BOOKING_LINK = 'limitlesslivingmd.com/discovery';
-
-// The opener goal-discovery question family. Should appear exactly once per
-// conversation. Each of these patterns catches a real paraphrase Claude tends
-// to produce when it wants to pivot to goal discovery a second time:
-//   "what are you hoping to work on"
-//   "hoping peptides might help with"
-//   "is there something specific you're hoping"
-//   "any particular goal"
-//   "what are you after"
-const GOAL_MENU_QUESTION_PATTERNS: RegExp[] = [
-  /\bwhat (?:are you|'re you|you)\s+(?:hoping|looking|trying|wanting)\s+to\s+(?:work\s+on|focus\s+on|improve|tackle|address)\b/i,
-  /\b(?:hoping|looking|trying|wanting)\s+(?:peptides|them|this|something|anything)?\s*(?:might|to|could|can)?\s*help\s+(?:you\s+)?(?:with|out)\b/i,
-  /\bis there (?:anything|something)\s+(?:specific\s+)?(?:you're|you are|you)\s+(?:hoping|looking|trying|wanting)\b/i,
-  /\bany (?:specific|particular)\s+(?:goal|area|thing|peptide|issue|focus)\b/i,
-  /\bwhat (?:are you|'re you|you) after\b/i,
-  /\bwhat brought you\b/i,
+// "AI-tell" phrases to soft-cap at 1 per conversation. Spiffy DOES use
+// these sparingly (evidence in Phase 2 voice synthesis) but over-use
+// is the #1 bot tell. Same mechanism as goal-menu repeat: if any prior
+// assistant message already contained the phrase, reject on the next.
+const AI_TELL_PATTERNS: { name: string; rx: RegExp }[] = [
+  { name: 'i_understand', rx: /\bI understand\b/i },
+  { name: 'i_hear_you', rx: /\bI hear you\b/i },
+  { name: 'happy_to_help', rx: /\bhappy to help\b/i },
+  { name: 'totally', rx: /\btotally\b/i },
+  { name: 'i_feel_you', rx: /\bI feel you\b/i },
 ];
 
-function matchesGoalMenuQuestion(text: string): boolean {
-  return GOAL_MENU_QUESTION_PATTERNS.some((rx) => rx.test(text));
+// Question-stem detector. Used to distinguish rhetorical questions
+// (whose "?" is followed by a declarative) from real answer-seeking
+// questions.
+const QUESTION_STEM =
+  /^(?:what(?:'s|s)?|how(?:'s|s)?|when|where|why|who|which|is|are|was|were|do|does|did|can|could|would|will|should|have|has|had|any|want|u\s)\b/i;
+
+// Qualifier question families. Bot should not ask the same qualifier
+// more than twice in a thread; 3rd ask is form-field behavior.
+const QUALIFIER_FAMILIES: { name: string; rx: RegExp }[] = [
+  {
+    name: 'week',
+    rx: /\bwhich\s+week\b|\bwhat\s+week\b|\byou\s+know\s+which\s+week\b|\bwhen'?s?\s+your\s+spring\s+break\b|\bwhat'?s?\s+your\s+spring\s+break\s+week\b/i,
+  },
+  {
+    name: 'destination',
+    rx: /\bwhich\s+destination\b|\bwhat\s+destination\b|\bwhere\s+(?:were|are)\s+(?:you|y'?all)\s+lookin(?:g)?\s+to\s+(?:book|go)\b|\bwhere\s+(?:you|y'?all)\s+(?:wanna|want to)\s+go\b/i,
+  },
+  {
+    name: 'group_size',
+    rx: /\bhow\s+many\s+ppl\b|\bhow\s+many\s+people\b|\bhow\s+big\s+is\s+(?:the|your)\s+group\b|\bgroup\s+size\b|\bhow\s+many\s+in\s+(?:the|your)\s+group\b/i,
+  },
+  {
+    name: 'school',
+    rx: /\bwhich\s+school\b|\bwhat\s+school\b|\bwhere\s+(?:y'?all|you\s+all|you|ya)\s+(?:from|at|go)\b/i,
+  },
+  {
+    name: 'timeline',
+    rx: /\bhow\s+soon\b|\blookin(?:g)?\s+to\s+(?:book|lock|get\s+(?:things|it)\s+(?:locked|booked))\b|\bwhen\s+(?:were|are)\s+you\s+lookin(?:g)?\b|\btime(?:line|frame)\b/i,
+  },
+];
+
+/**
+ * Count real answer-seeking questions in a message.
+ *
+ * A "?" followed by a declarative clause (a statement, not another
+ * question-stem) is treated as rhetorical and does NOT count. Only
+ * "?"s followed by nothing or by another question-stem clause count.
+ *
+ * Examples:
+ *  - "honest take? Punta Cana all day. which week yall goin?" -> 1
+ *    ("honest take?" is rhetorical, answered by "Punta Cana all day.")
+ *  - "is it cool if I send through email? its a little long for text" -> 0
+ *    (permission question answered by the declarative reason)
+ *  - "what week are you goin? how many ppl?" -> 2 (compound)
+ *  - "yall goin Riu or Tesoro?" -> 1 (single question with "or" alt)
+ */
+function countRealQuestions(text: string): number {
+  const qIndices: number[] = [];
+  for (let i = 0; i < text.length; i++) if (text[i] === '?') qIndices.push(i);
+  if (qIndices.length === 0) return 0;
+
+  let realCount = 0;
+  for (let i = 0; i < qIndices.length; i++) {
+    const q = qIndices[i];
+    // Look at text AFTER this "?" up to the next sentence break (".", "!", "?", end).
+    const rest = text.slice(q + 1);
+    const nextBreak = rest.search(/[.!?\n]/);
+    const afterChunkRaw = nextBreak === -1 ? rest : rest.slice(0, nextBreak);
+    const afterChunk = afterChunkRaw.trim().replace(/^[,\s]+/, '');
+
+    if (afterChunk.length === 0) {
+      // Trailing "?" at end of message. Count as real.
+      realCount += 1;
+      continue;
+    }
+
+    // Does the following clause look like another question?
+    if (QUESTION_STEM.test(afterChunk)) {
+      // Another Q follows -> current "?" is a real Q, and the next one
+      // will also get counted on its own iteration.
+      realCount += 1;
+      continue;
+    }
+
+    // Following clause is declarative -> the preceding "?" was rhetorical.
+    // Don't count.
+  }
+
+  return realCount;
 }
 
-// Rough one-question-per-message heuristic. Split on sentence or clause
-// terminators, count clauses that begin with a question stem. Two or more
-// stems in one message = compound question = reject.
-// "which" and "why" are excluded because they appear in relative clauses far
-// more than in questions ("which is why they help", "why it works so well").
-// "who" is excluded for the same reason ("someone who knows").
-const QUESTION_STARTER = /^(?:what|what's|how|how's|when|where|is\s+there|is\s+it|are\s+you|are\s+there|do\s+you|does\s+it|did\s+you|can\s+you|could\s+you|would\s+you|will\s+you|should\s+you|have\s+you|has\s+it|had\s+you|any\s+specific|any\s+particular|want(?:\s+me|\s+to)?\b)\b/i;
-
-function countQuestionClauses(text: string): number {
-  const clauses = text
-    .split(/[.!?,]\s+/)
-    .map((c) => c.trim())
-    .filter(Boolean);
-  return clauses.filter((c) => QUESTION_STARTER.test(c)).length;
-}
-
-// Matches em dash, en dash, figure dash, horizontal bar. Hyphens between
-// letters handled separately (allow in URLs and words like "US-only").
+// Matches em dash, en dash, figure dash, horizontal bar, minus.
 const DASH_CHARS = /[\u2012\u2013\u2014\u2015\u2212]/g;
 
 const EMOJI_REGEX =
   /[\u{1F300}-\u{1FAFF}\u{1F600}-\u{1F64F}\u{2600}-\u{27BF}\u{1F680}-\u{1F6FF}]/gu;
 
+// Patterns that signal the inbound was an objection, stall, thanks, or
+// emotional moment — turns where Spiffy would just respond and STOP,
+// never tack on a qualifier question.
+const SOFT_TURN_INBOUND: RegExp[] = [
+  /\b(?:thanks|thank you|thx|ty|appreciate it)\b/i,
+  /\b(?:cool thanks|ok thanks|ok cool|sounds good|ok bet|aight|np|no prob)\b/i,
+  /\b(?:just looking|not ready|not today|maybe later|not sure yet)\b/i,
+  /\b(?:let me (?:ask|talk|check|think)|need to (?:ask|talk|check|think))\b/i,
+  /\b(?:too expensive|cant afford|over budget|kinda steep|thats a lot)\b/i,
+  /\b(?:is this (?:a scam|legit|real)|sketchy|too good to be true)\b/i,
+  /^(?:ok|k|bet|word|yea|yeah|yep|yup|sure|for sure|fs|aight|cool|np|sounds good|got it|gotcha)\.?\s*$/i,
+];
+
 export type GuardrailInput = {
   candidate: string;
   linkSendCountBefore: number;
+  /** True if this is the first assistant message in the conversation. */
   isFirstMessage: boolean;
   /** Prior assistant messages in this conversation (for repeat detection). */
   priorAssistantMessages?: string[];
+  /** The inbound message the bot is replying to (for soft-turn detection). */
+  inboundText?: string;
+  /** Lengths of recent assistant messages (for rhythm variance check). */
+  priorAssistantLengths?: number[];
 };
 
 export type GuardrailResult =
@@ -132,72 +228,66 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
   const violations: string[] = [];
   let text = input.candidate.trim();
 
-  // 1. Remove every dash-like character, replace with comma-space. Keep
-  //    hyphens that are clearly inside a word (letter-hyphen-letter) only
-  //    if they appear in approved tokens; otherwise kill them too.
+  // 1. Strip dashes. Replace em/en-class with comma-space, soften
+  //    letter-hyphen-letter to space. Preserve URL hyphens (URLs are
+  //    extremely rare in bot output; only secure.springbreaku.com links
+  //    which use upper-case codes without hyphens).
   text = text.replace(DASH_CHARS, ', ');
-  // Hyphens between letters (e.g. "US-only", "long-term") get softened.
   text = text.replace(/([A-Za-z])-([A-Za-z])/g, '$1 $2');
-  text = text.replace(/ ,/g, ',').replace(/,\s+,/g, ',').replace(/\s{2,}/g, ' ').trim();
+  text = text
+    .replace(/ ,/g, ',')
+    .replace(/,\s+,/g, ',')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 
-  // 2. Normalize doctor name variants.
+  // 2. Normalize rep name variants to "Spiffy". Cheap rewrite, not a
+  //    reject. Handles the case where the LLM tries "Derrick".
   for (const rx of NAME_VARIANTS) {
+    const before = text;
     text = text.replace(rx, CANONICAL_NAME);
+    if (text !== before) violations.push('normalized_rep_name');
   }
 
-  // 2b. If the full canonical name appears more than once in this single
-  //     outgoing message, keep the first occurrence and demote the rest to
-  //     "Dr. Lee". A human would not text the full name twice in one SMS.
+  // 3. Strip emoji anywhere. Spiffy uses zero.
   {
-    let seen = 0;
-    text = text.replace(/Dr\.\s+Samuel\s+B\.\s+Lee\s+MD\b/g, () => {
-      seen += 1;
-      return seen === 1 ? CANONICAL_NAME : 'Dr. Lee';
-    });
-    if (seen > 1) violations.push('demoted_repeat_full_name');
-  }
-
-  // 3. Strip emoji unless this is the first message.
-  if (!input.isFirstMessage) {
     const hadEmoji = EMOJI_REGEX.test(text);
     if (hadEmoji) {
-      violations.push('stripped_emoji_after_opener');
+      violations.push('stripped_emoji');
       text = text.replace(EMOJI_REGEX, '').replace(/\s{2,}/g, ' ').trim();
     }
   }
 
-  // 3b. Strip AI-summary labels. These are pure tells: a real texter never
-  //     prefaces an answer with "Short version:" or "TL;DR,". Rewrite rather
-  //     than reject so we keep the content without another Claude call.
+  // 3b. Strip summary labels. Spiffy never prefaces answers with a
+  //     label. Rewrite rather than reject so we keep the payload.
   {
     const before = text;
     text = text.replace(
       /^(?:\s*)(short version|quick version|quick summary|tl;?dr|in short|to sum up|in summary|long story short|the short answer)\s*[:,\-]\s*/i,
       '',
     );
-    // Also handle mid-message after a leading fragment + punctuation.
-    //   "Nice. Short version: peptides are..." -> "Nice. peptides are..."
-    // We only strip when it directly precedes substantive content, so keep
-    // the pattern anchored to a sentence-start position after . ! ? or newline.
     text = text.replace(
       /([.!?\n]\s+)(short version|quick version|quick summary|tl;?dr|in short|to sum up|in summary|long story short|the short answer)\s*[:,\-]\s*/gi,
       '$1',
     );
     if (text !== before) {
       violations.push('stripped_ai_summary_label');
-      // Recapitalize the first letter of the new start if we stripped a prefix.
-      text = text.replace(/^([a-z])/, (c) => c.toUpperCase());
+      // Do NOT force-capitalize after strip; Spiffy starts lowercase
+      // ~40% of the time, and forcing case would break voice.
     }
   }
 
-  // 4. Reject banned openers -> regenerate.
+  // 4. Banned openers -> regenerate.
   for (const rx of BANNED_OPENERS) {
     if (rx.test(text)) {
-      return { ok: false, reason: `banned opener: ${rx}`, violations: [...violations, 'banned_opener'] };
+      return {
+        ok: false,
+        reason: `banned opener: ${rx}`,
+        violations: [...violations, 'banned_opener'],
+      };
     }
   }
 
-  // 4b. Reject banned phrases anywhere in the message.
+  // 4b. Banned phrases anywhere -> regenerate.
   for (const rx of BANNED_PHRASES) {
     if (rx.test(text)) {
       return {
@@ -208,36 +298,55 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
     }
   }
 
-  // 4c. Reject a repeat of the goal-menu opener question. It should appear
-  //     at most once per conversation. If any prior assistant message already
-  //     asked it (any paraphrase) and the candidate asks it again, force a
-  //     regenerate.
+  // 4c. AI-tell phrases: soft-cap at 1 per conversation. If this
+  //     message AND any prior assistant message both contain the same
+  //     phrase, reject (force Spiffy to find another beat).
   if (input.priorAssistantMessages && input.priorAssistantMessages.length > 0) {
-    if (matchesGoalMenuQuestion(text)) {
-      const priorAsked = input.priorAssistantMessages.some(matchesGoalMenuQuestion);
-      if (priorAsked) {
-        return {
-          ok: false,
-          reason: 'repeated goal-menu question (already asked once earlier in thread)',
-          violations: [...violations, 'repeated_goal_question'],
-        };
+    for (const tell of AI_TELL_PATTERNS) {
+      if (tell.rx.test(text)) {
+        const priorUsed = input.priorAssistantMessages.some((m) => tell.rx.test(m));
+        if (priorUsed) {
+          return {
+            ok: false,
+            reason: `over-used ai-tell phrase: ${tell.name} (already used earlier in thread)`,
+            violations: [...violations, `repeated_ai_tell:${tell.name}`],
+          };
+        }
       }
     }
   }
 
-  // 4d. Reject compound questions. Mia asks at most one question per message.
-  //     Two checks: (a) more than one "?" in the message; (b) more than one
-  //     sub-clause that starts with a question stem.
-  const qMarkCount = (text.match(/\?/g) ?? []).length;
-  if (qMarkCount >= 2 || countQuestionClauses(text) >= 2) {
+  // 4d. Compound question check. A "?" followed by a declarative answer
+  //     is treated as rhetorical (Spiffy pattern: "honest take? Punta
+  //     Cana all day."). Only >=2 REAL answer-seeking questions = reject.
+  const realQuestionCount = countRealQuestions(text);
+  if (realQuestionCount >= 2) {
     return {
       ok: false,
-      reason: 'compound question (more than one question in one message)',
+      reason: `compound question (${realQuestionCount} answer-seeking questions in one message)`,
       violations: [...violations, 'compound_question'],
     };
   }
 
-  // 5. Reject named staff -> regenerate.
+  // 4e. Qualifier-repeat guard. If the bot has already asked the same
+  //     qualifier family twice without the lead answering, a 3rd ask is
+  //     form-field behavior. Reject with a retry nudge.
+  if (input.priorAssistantMessages && input.priorAssistantMessages.length > 0) {
+    for (const fam of QUALIFIER_FAMILIES) {
+      if (fam.rx.test(text)) {
+        const priorAsks = input.priorAssistantMessages.filter((m) => fam.rx.test(m)).length;
+        if (priorAsks >= 2) {
+          return {
+            ok: false,
+            reason: `qualifier re-ask: ${fam.name} has already been asked ${priorAsks} times without an answer, dont re-ask, shift angle or work with what you have`,
+            violations: [...violations, `qualifier_repeat:${fam.name}`],
+          };
+        }
+      }
+    }
+  }
+
+  // 5. Staff names -> regenerate.
   for (const name of STAFF_NAMES) {
     const rx = new RegExp(`\\b${name}\\b`);
     if (rx.test(text)) {
@@ -249,35 +358,121 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
     }
   }
 
-  // 5b. Reject carrier-risk wellness-claim phrasing.
-  for (const rx of WELLNESS_CLAIM_PATTERNS) {
-    if (rx.test(text)) {
-      return {
-        ok: false,
-        reason: `wellness-claim carrier risk: ${rx}`,
-        violations: [...violations, 'carrier_risk_wellness_claim'],
-      };
-    }
+  // 5b. Hallucinated reservation link -> regenerate. The bot should
+  //     never produce /package/[CODE] — Spiffy's back office injects
+  //     those. If the LLM emits one it's inventing.
+  if (HALLUCINATED_LINK_PATTERN.test(text)) {
+    return {
+      ok: false,
+      reason: 'hallucinated reservation link (LLM cannot generate package codes)',
+      violations: [...violations, 'hallucinated_link'],
+    };
   }
 
-  // 6. Booking link budget.
-  const linkPresent = text.toLowerCase().includes(BOOKING_LINK.toLowerCase());
+  // 6. Link-budget check. No generic booking link for Spiffy bot in
+  //    V1 since links are per-group and injected by ops. But we keep
+  //    the budget machinery in case a link gets injected via turn
+  //    context — counts any http(s):// URL toward budget to catch
+  //    whatever path gets wired up in the future.
+  const GENERIC_LINK = /https?:\/\/\S+/i;
+  const linkPresent = GENERIC_LINK.test(text);
   if (linkPresent && input.linkSendCountBefore >= 2) {
     return {
       ok: false,
-      reason: 'booking link budget exhausted',
+      reason: 'link budget exhausted',
       violations: [...violations, 'link_budget_exceeded'],
     };
   }
 
-  // 7. Length cap. SMS-friendly but not aggressive — we want the bridge
-  //    sentence to survive. Modern carriers concatenate long SMS into a
-  //    single message for the recipient, so 450 chars (3 segments) is a
-  //    fine hard cap.
+  // 7. Length cap. SMS-friendly. Spiffy's real median is much lower,
+  //    this is a safety net.
   const HARD_CAP = 450;
   if (text.length > HARD_CAP) {
     violations.push('too_long_trimmed');
     text = trimPreservingBridge(text, 3, HARD_CAP);
+  }
+
+  // 8. Qualifier-tack-on guard. If the inbound was a soft turn
+  //    (objection, stall, thanks, one-word reply), the bot should NOT
+  //    end with a qualifier question. Spiffy just responds and stops.
+  //    This is the #1 bot tell when it fires.
+  if (input.inboundText) {
+    const isSoftTurn = SOFT_TURN_INBOUND.some((rx) => rx.test(input.inboundText!));
+    if (isSoftTurn) {
+      const endsWithQualifier = QUALIFIER_FAMILIES.some((fam) => fam.rx.test(text));
+      if (endsWithQualifier) {
+        return {
+          ok: false,
+          reason: 'qualifier tacked onto a soft turn (objection/thanks/stall/one-word). just respond and stop, dont ask a qualifier here',
+          violations: [...violations, 'qualifier_on_soft_turn'],
+        };
+      }
+    }
+  }
+
+  // 9. Apostrophe density rewrite. Spiffy drops apostrophes ~40% of
+  //    the time ("thats", "ill", "im", "dont"). If too many
+  //    contractions have apostrophes the text reads too proper.
+  //    Rewrite, don't reject — this is voice polish, not a rule break.
+  {
+    const contractionsWithApostrophe = (text.match(/\b(?:I'm|it's|that's|there's|I'll|don't|can't|won't|wouldn't|couldn't|isn't|aren't|didn't|doesn't|haven't|hasn't|we've|they've|you've|I've|we're|they're|you're|he's|she's|what's|who's|let's)\b/gi) ?? []);
+    if (contractionsWithApostrophe.length >= 3) {
+      // Drop apostrophes on roughly half, favoring the ones Spiffy
+      // drops most (thats, ill, im, dont, cant, its, theres, wont).
+      const dropMap: Record<string, string> = {
+        "I'm": "im", "i'm": "im",
+        "it's": "its", "It's": "its",
+        "that's": "thats", "That's": "thats",
+        "there's": "theres", "There's": "theres",
+        "I'll": "ill", "i'll": "ill",
+        "don't": "dont", "Don't": "dont",
+        "can't": "cant", "Can't": "cant",
+        "won't": "wont", "Won't": "wont",
+        "wouldn't": "wouldnt", "Wouldn't": "wouldnt",
+        "didn't": "didnt", "Didn't": "didnt",
+        "doesn't": "doesnt", "Doesn't": "doesnt",
+        "isn't": "isnt", "Isn't": "isnt",
+        "aren't": "arent", "Aren't": "arent",
+        "we've": "weve", "We've": "weve",
+        "they've": "theyve",
+        "you've": "youve",
+        "I've": "ive",
+        "we're": "were", "We're": "were",
+        "they're": "theyre",
+        "you're": "youre", "You're": "youre",
+        "let's": "lets", "Let's": "lets",
+        "what's": "whats", "What's": "whats",
+      };
+      let dropCount = 0;
+      text = text.replace(/\b(?:I'm|it's|that's|there's|I'll|don't|can't|won't|wouldn't|couldn't|isn't|aren't|didn't|doesn't|haven't|hasn't|we've|they've|you've|I've|we're|they're|you're|he's|she's|what's|who's|let's)\b/gi, (match) => {
+        // Drop ~50% of apostrophes, alternating.
+        dropCount++;
+        if (dropCount % 2 === 0) return match; // keep every other one
+        return dropMap[match] ?? match;
+      });
+      if (dropCount > 0) violations.push('softened_apostrophes');
+    }
+  }
+
+  // 10. Rhythm variance. If the last 3 assistant messages were all in
+  //     the same length band (within 40 chars of each other), the bot
+  //     has fallen into a rigid rhythm. Reject to force variation.
+  if (input.priorAssistantLengths && input.priorAssistantLengths.length >= 2) {
+    const recent = input.priorAssistantLengths.slice(-2);
+    const currentLen = text.length;
+    const allLengths = [...recent, currentLen];
+    const minLen = Math.min(...allLengths);
+    const maxLen = Math.max(...allLengths);
+    // If all 3 messages are within a 40-char band AND all > 60 chars,
+    // that's the robotic 2-3 sentence rhythm. Short replies ("bet",
+    // "word") naturally break the pattern.
+    if (maxLen - minLen < 40 && minLen > 60) {
+      return {
+        ok: false,
+        reason: 'rhythm is too uniform, last 3 replies are all similar length. vary it up, go shorter or longer than usual',
+        violations: [...violations, 'uniform_rhythm'],
+      };
+    }
   }
 
   return {
@@ -289,13 +484,12 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
 }
 
 function trimPreservingBridge(text: string, maxSentences: number, maxChars: number): string {
-  const parts = (text.match(/[^.!?]+[.!?]?/g) ?? [text]).map((s) => s.trim()).filter(Boolean);
+  const parts = (text.match(/[^.!?]+[.!?]?/g) ?? [text])
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (parts.length <= maxSentences && text.length <= maxChars) return text;
 
-  // Keep first sentence (validation) + last sentence (bridge).
-  // Drop middle sentences until total length fits.
   if (parts.length <= 2) {
-    // Nothing to drop. Hard-truncate as a fallback.
     return text.slice(0, maxChars).trim();
   }
 
@@ -305,7 +499,6 @@ function trimPreservingBridge(text: string, maxSentences: number, maxChars: numb
 
   let kept = `${first} ${last}`;
   if (kept.length <= maxChars && maxSentences >= 2) {
-    // Try to add middles back in order until we hit a cap.
     for (const m of middles) {
       const candidate = `${first} ${m} ${last}`;
       if (candidate.length <= maxChars) kept = candidate;
@@ -314,7 +507,6 @@ function trimPreservingBridge(text: string, maxSentences: number, maxChars: numb
     return kept;
   }
 
-  // First + last still too long. Truncate the first, keep the bridge intact.
   const budget = maxChars - last.length - 1;
   if (budget > 40) {
     return `${first.slice(0, budget).trim()} ${last}`;

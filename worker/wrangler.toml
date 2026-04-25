@@ -1,11 +1,11 @@
-name = "llmd-mia"
+name = "gbt-spiffy"
 main = "src/index.ts"
 compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
 
 # Defaults. Override per-env below.
 [vars]
-MIA_MODEL = "claude-sonnet-4-6"
+SPIFFY_MODEL = "claude-sonnet-4-6"
 
 # Secrets (set with `wrangler secret put NAME`):
 #   ANTHROPIC_API_KEY
@@ -41,7 +41,7 @@ new_sqlite_classes = ["ContactThread"]
 # migrations_dir = "src/db"
 
 [env.staging]
-name = "llmd-mia-staging"
+name = "gbt-spiffy-staging"
 
 [env.production]
-name = "llmd-mia"
+name = "gbt-spiffy"

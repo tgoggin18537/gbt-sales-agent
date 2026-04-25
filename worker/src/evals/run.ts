@@ -8,12 +8,12 @@
  */
 
 import { callClaude } from '../integrations/anthropic';
-import { MIA_V2_SYSTEM_PROMPT, buildTurnContext } from '../prompts/mia.v2';
+import { SPIFFY_SYSTEM_PROMPT, buildTurnContext } from '../prompts/spiffy';
 import { renderFaqForPrompt } from '../prompts/faq';
 import { applyGuardrail } from '../agents/guardrail';
 import { GOLDEN, type GoldenCase } from './golden';
 
-const SYSTEM_CACHED = `${MIA_V2_SYSTEM_PROMPT}\n\n${renderFaqForPrompt()}`;
+const SYSTEM_CACHED = `${SPIFFY_SYSTEM_PROMPT}\n\n${renderFaqForPrompt()}`;
 
 type CaseResult = {
   name: string;
@@ -26,15 +26,18 @@ async function runOne(apiKey: string, model: string, c: GoldenCase): Promise<Cas
   const turnCtx = buildTurnContext({
     linkSendCount: c.state.linkSendCount ?? 0,
     emailCaptured: c.state.emailCaptured,
-    usConfirmed: c.state.usConfirmed,
-    goalFromManychat: c.state.goal,
+    goal: c.state.goal,
+    week: c.state.week,
+    destination: c.state.destination,
+    groupSize: c.state.groupSize,
+    school: c.state.school,
   });
 
   const history = [...c.history, { role: 'user' as const, content: c.inbound }];
 
-  // Special case: existing patient short-circuit (handled before Claude in prod).
-  if (c.name === 'existing_patient_bails_out') {
-    const clean = 'Got it, let me have someone from the team jump in with you here.';
+  // Special case: existing customer short-circuit (handled before Claude in prod).
+  if (c.name === 'existing_customer_handoff') {
+    const clean = 'aight bet, lemme have someone from our team jump in with you here';
     return checkExpectations(c, clean);
   }
 
@@ -88,7 +91,7 @@ function checkExpectations(c: GoldenCase, draft: string): CaseResult {
 async function main() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
-  const model = process.env.MIA_MODEL || 'claude-sonnet-4-6';
+  const model = process.env.SPIFFY_MODEL || process.env.MIA_MODEL || 'claude-sonnet-4-6';
   const results: CaseResult[] = [];
   for (const c of GOLDEN) {
     const r = await runOne(apiKey, model, c);

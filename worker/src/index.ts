@@ -15,7 +15,7 @@ export default {
     const url = new URL(req.url);
     try {
       if (req.method === 'GET' && url.pathname === '/health') {
-        return Response.json({ ok: true, service: 'llmd-mia', ts: Date.now() });
+        return Response.json({ ok: true, service: 'gbt-spiffy', ts: Date.now() });
       }
       if (req.method === 'POST' && url.pathname === '/webhook/ghl/inbound-sms') {
         return await handleInboundSms(req, env);

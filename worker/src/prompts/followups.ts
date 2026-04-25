@@ -1,22 +1,26 @@
 /**
- * Follow-up SMS bodies for the drip sequence (Nicole's schedule).
+ * Follow-up SMS bodies for the drip sequence.
  *
- * Cadence lives in GHL workflow. These are the exact message bodies. They
- * obey Mia's voice rules (no dashes, no emojis, <=3 sentences, no staff
- * names, single booking link budget across the whole sequence).
+ * Cadence lives in GHL Workflow 4. These are the exact message bodies.
+ * They obey all Spiffy voice rules and guardrail rules: no dashes, no
+ * emoji, no staff names, no summary labels, one question max, no
+ * reservation link (link budget is reserved for live conversations).
+ *
+ * The cadence (+1d / +3d / +7d) matches the playbook default. Spiffy's
+ * own cadence wasn't cleanly derivable from timestamps in the corpus,
+ * so the cadence is copied from the playbook and the BODIES are Spiffy.
+ * See SPIFFY_V2_QUESTIONS.md to confirm cadence with Spiffy.
  */
 
 export const FOLLOWUPS = {
   /** +1 day no reply, soft check in. */
-  day1: "Hey, no rush, just wanted to check if you had any other questions floating around.",
+  day1: "yoo checkin in. any thoughts on the options I sent over?",
 
-  /** +3 days no reply, share something valuable (education, not sales). */
+  /** +3 days no reply, gentle urgency. */
   day3:
-    "Quick thing in case it's useful. Most people I talk to think peptides work like supplements, but they actually signal your cells to do specific things like burn fat or repair tissue. That's why they tend to work when other stuff hasn't.",
+    "yoo just a heads up, availability for these spots has been moving fast this time of year. lmk if yall wanted to keep it going",
 
-  /** +7 days no reply, final friendly nudge with the booking link. */
+  /** +7 days no reply, warm last nudge. */
   day7:
-    "Last one from me, no pressure at all. If you ever want to chat with the team about what might fit, here's the link: limitlesslivingmd.com/discovery. Hope you find what works for you.",
-
-  /** +14 days, soft handoff to long term nurture (no bot action, GHL tags them). */
+    "last one from me for now, no pressure. if spring break is still on the radar just hit me back and ill send fresh options",
 };
