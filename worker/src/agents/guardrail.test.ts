@@ -515,6 +515,73 @@ const CASES: Case[] = [
     expect: { ok: true },
   },
 
+  // ---- APOLOGY+REPLAY BAN (LLMD V3 port) ----
+  {
+    name: 'bans: sorry about that lemme try again',
+    candidate: "sorry about that, lemme try again",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'bans: sorry my last message got scrambled',
+    candidate: "sorry, my last message got scrambled",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'bans: sorry that got cut off',
+    candidate: "sorry that got cut off, here it is again",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'bans: what I said earlier wasnt right, my last message',
+    candidate: "what I said earlier wasn't quite right, my last message had the wrong info",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'bans: let me try that again',
+    candidate: "let me try that again",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'bans: ok let me try that',
+    candidate: "ok let me try that",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'bans: to recap what I said',
+    candidate: "to recap what I said, the deposit is $200",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'bans: ha that scrambled',
+    candidate: "ha that scrambled, here's the real answer",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'bans: my reply glitched',
+    candidate: "my reply glitched, Punta Cana is the move",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'bans: got cut off on my end',
+    candidate: "got cut off on my end, anyway the deposit is $200",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'bans: something went wrong on my end',
+    candidate: "something went wrong on my end, lemme resend",
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'ALLOWS: sorry youre dealing with that (not tech apology)',
+    candidate: "sorry youre dealing with that, which week works best for your group?",
+    expect: { ok: true },
+  },
+  {
+    name: 'ALLOWS: my last trip there was wild (not apology+replay)',
+    candidate: "my last trip there was wild, Punta Cana all day",
+    expect: { ok: true },
+  },
+
   // ---- LENGTH CAP ----
   {
     name: 'allows: 3-sentence Spiffy reply under cap',

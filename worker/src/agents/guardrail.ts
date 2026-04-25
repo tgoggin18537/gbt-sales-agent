@@ -63,6 +63,12 @@ const BANNED_PHRASES: RegExp[] = [
   /\bjust\s+want(?:ed)?\s+to\s+(?:reach\s+out|check\s+in|follow\s+up)\b/i,
   /\bfigured\s+I'?d\s+reach\s+out\b/i,
   /\bthanks?\s+for\s+reaching\s+out\b/i,
+  // ---- APOLOGY+REPLAY BAN (LLMD V3 port) ----
+  // Tech-failure apologies Claude sometimes invents when it sees two
+  // consecutive user messages with no bot reply in between.
+  /\bsorry,?\s+(?:about that|something|my last|that got)/i,
+  /\b(my last message|what i said|let me try (that|again)|to recap what i said)\b/i,
+  /\b(scrambled|glitched|got messed up|got cut off on my end|something went wrong on my end)\b/i,
 ];
 
 // Real rep names that surface in the transcripts. Bot must never
