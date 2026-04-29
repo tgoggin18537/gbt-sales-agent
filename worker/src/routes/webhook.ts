@@ -165,24 +165,26 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
     tagBasedExisting ||
     (await classifyExistingPatient(env.ANTHROPIC_API_KEY, inboundBody));
   if (isExisting) {
-    await sendSms(
-      { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-      {
-        contactId,
-        message: 'aight bet, lemme have someone from our team jump in with you here',
-      },
-    );
+    // Silent handoff: tag and note for human pickup, do NOT send any
+    // SMS to the prospect. Per Spiffy V2 (4/29 feedback): when we
+    // escalate to a teammate, the conversation should just continue
+    // from a human's hands without announcing the swap.
     await addTag(
       { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
       contactId,
       'needs-human',
     );
+    await addTag(
+      { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+      contactId,
+      'human-takeover',
+    );
     await addContactNote(
       { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
       contactId,
-      `[Spiffy] Existing-customer signal detected. Inbound: "${inboundBody}". Team action needed.`,
+      `[Spiffy] Existing-customer signal detected. Inbound: "${inboundBody}". Bot is silent; team please respond.`,
     );
-    return Response.json({ handled: 'existing_customer' });
+    return Response.json({ handled: 'existing_customer_silent' });
   }
 
   // ----- Initial-touch short-circuit -----

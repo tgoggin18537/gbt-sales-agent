@@ -164,6 +164,8 @@ export const FAQ: FaqEntry[] = [
     triggers: ['email me', 'send me info', 'can you email', 'send details'],
     answer:
       "yup. is it cool if I send through email? its a little long for text",
+    notes:
+      'When asking for the email address itself, use "bet, whats the best email to send everything to?" — never "whats your email?".',
   },
   {
     triggers: ['didnt get the email', 'no email', 'email didnt come', 'didnt come through'],
@@ -191,9 +193,11 @@ export const FAQ: FaqEntry[] = [
       "cool all good. ill send what we have in mind, just keep in mind things change daily and availability is low this time of year",
   },
   {
-    triggers: ['ask my group', 'talk to my friends', 'need to check with the group', 'group vote'],
+    triggers: ['ask my group', 'talk to my friends', 'need to check with the group', 'group vote', 'show my friends', 'not rlly sure', 'gotta show my'],
     answer:
-      "word sounds good. lmk what the squad thinks. down to hop on a call later if yall wanna run through anything",
+      "word all good, things are moving quickly already so we'll def want to get it in motion soon\nis it cool if i send the info through email? its a little long for text",
+    notes:
+      'Hesitation / needs-to-check-with-group response. Plant urgency, then pivot to email handoff in the same turn. Two thoughts back to back, separated by a line break. Do NOT just stall with "lmk what the squad thinks" — capture the email and keep the deal moving.',
   },
   {
     triggers: ['too expensive', 'expensive', 'cant afford', 'over budget', 'budget is'],
@@ -231,10 +235,18 @@ export const FAQ: FaqEntry[] = [
       "this Spiffy from SpringBreak U. you filled out a form earlier for spring break info, im your trip rep for getting y'all squared away",
   },
   {
-    triggers: ['i already booked', 'im a customer', 'already paid', 'already deposited'],
-    answer: "aight bet, lemme have someone from our team jump in with you here",
+    triggers: ['are you real', 'are you a bot', 'is this a real person', 'is this real', 'are you human'],
+    answer:
+      "umm yea? lol. how'd you find us initially, was it google?",
     notes:
-      'Existing-customer short-circuit. Webhook handles tag-based routing first, but if the bot somehow sees this inbound it should reply once and stop.',
+      'Are-you-real deflection. Short, slightly incredulous, deflects with a question. Do NOT over-explain or list reasons. The deflection is the whole answer.',
+  },
+  {
+    triggers: ['is this a scam', 'sketchy', 'too good to be true', 'how do i know this is real'],
+    answer:
+      "no not at all lol. we have a great reputation been running these trips for over 10 years. you can search us up on the Better Business Bureau if you'd like",
+    notes:
+      'Scam pushback. Concise + BBB credibility. No long explanation about ops team, payment flow, etc. Keep it tight.',
   },
 ];
 
@@ -245,14 +257,14 @@ export const OBJECTIONS: FaqEntry[] = [
       "cool all good. ill send what we have in mind, just keep in mind things change daily and availability is low this time of year",
   },
   {
-    triggers: ['let me ask my group', 'need to talk to my friends', 'group decision'],
+    triggers: ['let me ask my group', 'need to talk to my friends', 'group decision', 'show my friends', 'not rlly sure'],
     answer:
-      "word sounds good. lmk what the squad thinks",
+      "word all good, things are moving quickly already so we'll def want to get it in motion soon\nis it cool if i send the info through email? its a little long for text",
   },
   {
     triggers: ['is this a scam', 'sketchy', 'too good to be true', 'how do i know this is real'],
     answer:
-      "all good question. weve been running these trips for years, ops team on the ground at every destination. everything goes through our legit payment flow, nothing happens over text",
+      "no not at all lol. we have a great reputation been running these trips for over 10 years. you can search us up on the Better Business Bureau if you'd like",
   },
   {
     triggers: ['too expensive', 'cant afford'],

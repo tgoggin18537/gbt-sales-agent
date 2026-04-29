@@ -255,11 +255,22 @@ export const GOLDEN: GoldenCase[] = [
     history: [],
     inbound: 'hey im already booked, just adding a friend',
     state: { openerSent: true },
-    // Webhook short-circuits before Claude but eval harness replays the
-    // static handoff text.
-    mustContainAny: ['someone from', 'team jump in', 'team will', 'team'],
-    mustNotContain: ['$200', 'deposit', 'whats your week', 'which destination'],
-    rubric: 'Existing customer short-circuit reply (hand off to humans).',
+    // Webhook short-circuits before Claude with a SILENT handoff (no SMS
+    // sent, just tags). Eval models that as an empty draft. Per Spiffy
+    // V2 4/29 feedback: never announce the swap to the prospect.
+    mustNotContain: [
+      '$200',
+      'deposit',
+      'whats your week',
+      'which destination',
+      'someone from',
+      'team jump in',
+      'team will',
+      'lemme have someone',
+      'pass you to',
+      'loop in',
+    ],
+    rubric: 'Existing customer silent handoff (bot sends nothing, server tags for human pickup).',
   },
   {
     name: 'short_reply_matches_energy',

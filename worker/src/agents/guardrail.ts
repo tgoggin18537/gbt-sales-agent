@@ -79,6 +79,15 @@ const BANNED_PHRASES: RegExp[] = [
   /\bwe appreciate your interest\b/i,
   /\bper our previous message\b/i,
   /\bkindly review\b/i,
+  // ---- HANDOFF ANNOUNCEMENT BAN (Spiffy V2 4/29 feedback) ----
+  // The bot IS the someone from the team. Never announce a handoff.
+  // The server tags silently. If the model emits any of these, retry.
+  /\bsomeone from (?:our|the) team (?:will|jump|is gonna|is going to|gonna)/i,
+  /\blemme have someone (?:from|else|on)/i,
+  /\bhave (?:a teammate|someone else|one of our team) (?:take|jump|reach)/i,
+  /\b(?:passing|handing|forwarding) (?:this|you) (?:to|over to) (?:our|the) team\b/i,
+  /\b(?:teammate|coworker|colleague) (?:will|is gonna|is going to) (?:reach|take|jump|hop)/i,
+  /\bill (?:loop|bring|get) (?:in|on) (?:our|the) team\b/i,
 ];
 
 // Real rep names that surface in the transcripts. Bot must never

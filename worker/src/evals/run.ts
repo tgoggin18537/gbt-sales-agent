@@ -35,10 +35,12 @@ async function runOne(apiKey: string, model: string, c: GoldenCase): Promise<Cas
 
   const history = [...c.history, { role: 'user' as const, content: c.inbound }];
 
-  // Special case: existing customer short-circuit (handled before Claude in prod).
+  // Special case: existing customer short-circuit (handled before Claude
+  // in prod). Per Spiffy V2 4/29 feedback the handoff is now SILENT —
+  // the server tags the contact and sends nothing. The eval models that
+  // by returning an empty draft.
   if (c.name === 'existing_customer_handoff') {
-    const clean = 'aight bet, lemme have someone from our team jump in with you here';
-    return checkExpectations(c, clean);
+    return checkExpectations(c, '');
   }
 
   let draft = '';
