@@ -351,9 +351,9 @@ export const FAQ: FaqEntry[] = [
   {
     triggers: ['are you real', 'are you a bot', 'is this a real person', 'is this real', 'are you human'],
     answer:
-      "yea lol. been doing this for a few years now, not a bad job lol",
+      "yea lol. been doing this for a few years now, not a bad job lol. if you wanna set up a call just lmk",
     notes:
-      'V5 Section 1.8 CORRECTION. The old "how\'d you find us, was it google?" deflection was killed in V5 testing (too clever, sounds deflecting). Rotate between these 3 lines naturally based on the moment: "yea lol. been doing this for a few years now, not a bad job lol" / "yea I am lol. this is literally what I do everyday" / "lol I wish I could tell you no" (playful, used in real booked convos). Pick one, dont stack them.',
+      'V5 Section 1.8 + Section 5 mandatory phrase. The old "how\'d you find us, was it google?" deflection was killed in V5 testing (too clever, sounds deflecting). Rotate between these 3 lines naturally based on the moment: "yea lol. been doing this for a few years now, not a bad job lol. if you wanna set up a call just lmk" / "yea I am lol. this is literally what I do everyday" / "lol I wish I could tell you no" (playful, used in real booked convos). The call offer tail is required per Section 5 mandatory phrase table. Pick one, dont stack them.',
   },
   {
     triggers: ['is this a scam', 'sketchy', 'too good to be true', 'how do i know this is real'],
