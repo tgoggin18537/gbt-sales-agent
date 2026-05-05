@@ -314,7 +314,7 @@ const CASES: Case[] = [
   },
   {
     name: 'ALLOWS: permission question + declarative + next real question',
-    candidate: "is it cool if I send through email? its a little long for text. whats your email?",
+    candidate: "is it cool if I send through email? its a little long for text. which one yall lookin at?",
     expect: { ok: true },
   },
   {

@@ -36,6 +36,11 @@ import type { Env } from '../env';
 
 const SHUTOFF_TAGS = ['do-not-message', 'human-takeover', 'call-booked', 'customer', 'booked', 'traveler'];
 const ENGAGED_TAG = 'ai-bot-engaged';
+// V5 email cadence (#1.1): when the bot first captures an email, we tag the
+// contact with this so a GHL workflow fires the breakdown email send. The
+// workflow then adds 'breakdown-sent' (informational) and removes this tag.
+// See ~/code/gbt-sales-agent/docs/ghl-email-workflow.md for the GHL setup.
+const SEND_BREAKDOWN_TAG = 'send-breakdown-email';
 
 // Spiffy's cold opener. Single-message per Phase 2 decision (multi-bubble
 // split deferred to V2 infra upgrade). Pulled verbatim style from his
@@ -419,6 +424,9 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
       // in running per pass.
       const newestBody = messagesToProcess[messagesToProcess.length - 1]?.body ?? '';
       const emailSeen = extractEmail(newestBody);
+      // V5 #1.1: only fire the breakdown-email workflow on the FIRST capture.
+      // Re-firing on later turns (lead repeats their email, etc.) would spam.
+      const isFirstEmailCapture = !!emailSeen && !currentState.emailCaptured;
 
       // Persist every pending user turn, then the assistant reply.
       for (let i = 0; i < messagesToProcess.length; i++) {
@@ -450,6 +458,21 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
           contactId,
           ENGAGED_TAG,
         );
+      }
+
+      // V5 #1.1: fire the breakdown-email workflow trigger on first email
+      // capture. Best-effort; if GHL is down we still want to ship the bot
+      // reply so we swallow errors and log.
+      if (isFirstEmailCapture) {
+        try {
+          await addTag(
+            { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+            contactId,
+            SEND_BREAKDOWN_TAG,
+          );
+        } catch (err) {
+          console.error('Failed to add send-breakdown-email tag:', err);
+        }
       }
 
       // Analytics for this pass.

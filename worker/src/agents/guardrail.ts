@@ -88,6 +88,28 @@ const BANNED_PHRASES: RegExp[] = [
   /\b(?:passing|handing|forwarding) (?:this|you) (?:to|over to) (?:our|the) team\b/i,
   /\b(?:teammate|coworker|colleague) (?:will|is gonna|is going to) (?:reach|take|jump|hop)/i,
   /\bill (?:loop|bring|get) (?:in|on) (?:our|the) team\b/i,
+  // ---- SPIFFY V5 BANNED PHRASES (May 4 feedback PDF) ----
+  // The breakdown email is "the breakdown" / "the info", never a "PDF".
+  // The word "PDF" anywhere in a Spiffy reply is a reject.
+  /\bpdf\b/i,
+  // Filler stalls Spiffy never uses. "hmm good one let me think on that"
+  // is the canonical bot tell flagged in section 2.3 of the V5 doc.
+  /\bhmm,?\s+good\s+one\b/i,
+  /\blet me think on that\b/i,
+  /\blet me check on that\b/i,
+  // Cold "what's your email" ask. The only acceptable phrasing is the
+  // softened versions; the cold ask is BANNED per section 1.3.
+  /\bwhat'?s your email\b/i,
+  /\bcan I get your email\b/i,
+  // "Circle back" — corporate filler. Use "follow up" or commit a step.
+  /\bcircle back\b/i,
+  // Old "are you real" Google deflection — V5 explicitly killed this.
+  /\bhow'?d you find us(?:\s+initially)?,?\s+(?:was it|via)\s+google\b/i,
+  // Group leader requirement — must be "fully paid" / "finish paying",
+  // never "depositors" / "deposits". V5 section 1.6 correction.
+  /\b15\+?\s+(?:confirmed\s+)?depositors?\b/i,
+  // Krystal Cancun is CHILL not party — section 3.1 correction.
+  /\bKrystal\b[^.]*\bparty\s+resort\b/i,
 ];
 
 // Real rep names that surface in the transcripts. Bot must never
