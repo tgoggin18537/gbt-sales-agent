@@ -110,6 +110,27 @@ const BANNED_PHRASES: RegExp[] = [
   /\b15\+?\s+(?:confirmed\s+)?depositors?\b/i,
   // Krystal Cancun is CHILL not party — section 3.1 correction.
   /\bKrystal\b[^.]*\bparty\s+resort\b/i,
+  // ---- SPIFFY v4.5 PRICING POSTURE BANS (May 13 feedback PDF) ----
+  // The single biggest urgency lever. Saying any of these once destroys
+  // the entire pricing-goes-up posture for the rest of the conversation.
+  // See spiffy.ts PRICING POSTURE section for the full rationale.
+  /\bprice\s+stays\s+the\s+same\b/i,
+  /\bpricing\s+stays\s+the\s+same\b/i,
+  /\bpackage\s+price\s+stays\s+the\s+same\b/i,
+  /\b(?:the\s+)?trip\s+price\s+stays\s+the\s+same\b/i,
+  /\beverything\s+else\s+stays\s+the\s+same\b/i,
+  /\bprice\s+(?:doesn'?t|wont|will\s+not|isn'?t\s+gonna)\s+(?:change|go\s+up)\b/i,
+  // Conceding the wait premise. Always reframe, never validate.
+  /\btechnically\s+ye(?:a|ah|s)\b/i,
+  /\byou\s+could\s+wait\b/i,
+  // Specific safe-booking deadlines. Sell-out timing stays vague.
+  // "(by|until) [month] (at the latest|to be safe|or so)".
+  /\b(?:by|until|before)\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+(?:at\s+the\s+latest|to\s+be\s+safe)\b/i,
+  /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+at\s+the\s+latest\b/i,
+  // Hardcoded deposit / pricing date anchors. The deposit changes per-quote, not per-calendar.
+  // Block phrasings like "after Jan 1 it goes to $200", "before June 1 you get $100", etc.
+  // Targets the specific pattern of "after/before/until [month] [day] [pricing/deposit verb]".
+  /\b(?:after|before|until|by)\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*\d{0,2},?\s+(?:it\s+)?(?:goes?\s+(?:up|to)|the\s+(?:deposit|price)|deposit\s+is|pricing\s+is)\b/i,
 ];
 
 // Real rep names that surface in the transcripts. Bot must never

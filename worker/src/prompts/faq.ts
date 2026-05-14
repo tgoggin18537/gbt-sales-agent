@@ -66,16 +66,16 @@ export const FAQ: FaqEntry[] = [
   {
     triggers: ['deposit', 'how much deposit', 'to reserve', 'to lock in'],
     answer:
-      "$100 deposit per person locks in each spot. then $100/month installments, final balance is due in December",
+      "right now its $100 per person to lock in each spot, then $100/month installments, final balance due in December",
     notes:
-      'V5 update: early season (spring/summer) standard is $100 deposit + $100/month, final balance December. Late season (fall/winter) is $200 deposit + larger installments, final balance mid-December. Late joiners pay current deposit + catch up to current installment stage at current pricing.',
+      'V4.5 update: NEVER attach a future-date guarantee to the deposit amount. Frame as "right now its $X" not "$X until Jan 1". Late joiners pay current deposit + catch up to current installment stage. Do NOT freelance specific calendar dates for when the deposit changes.',
   },
   {
     triggers: ['payment plan', 'pay over time', 'monthly', 'installment'],
     answer:
-      "yea so $100 gets everyone reserved and secured, then $100/month till December when the final balance is due. takes the pressure off doing it all at once",
+      "yea so the deposit gets everyone reserved and secured, then $100/month till December when the final balance is due. takes the pressure off doing it all at once",
     notes:
-      'Early-season default. If conversation context indicates late season, $200 deposit + larger installments + final balance mid-December.',
+      'V4.5 update: do not anchor a specific deposit amount to a future date. The right-now amount is fine; the cadence is what you sell here.',
   },
   {
     triggers: ['flight', 'flights included', 'airfare'],
@@ -228,14 +228,14 @@ export const FAQ: FaqEntry[] = [
   {
     triggers: ['ask my group', 'talk to my friends', 'need to check with the group', 'group vote', 'show my friends', 'not rlly sure', 'gotta show my'],
     answer:
-      "word all good, things are moving quickly already so we'll def want to get it in motion soon\nis it cool if i send the info through email? its a little long for text",
+      "word all good, things are moving quickly already so we'll def want to get it in motion soon\nis it cool if i send the info through email? its a little long for text and that way you can throw it in the group chat too",
     notes:
       'Hesitation / needs-to-check-with-group response. Plant urgency, then pivot to email handoff in the same turn. Two thoughts back to back, separated by a line break. Do NOT just stall with "lmk what the squad thinks" — capture the email and keep the deal moving.',
   },
   {
     triggers: ['too expensive', 'expensive', 'cant afford', 'over budget', 'budget is'],
     answer:
-      "yea I feel that. we got a payment plan tho, $100 deposit locks in each person then $100/month installments till the final balance hits in December. want me to send the breakdown?",
+      "yea I feel that. we got a payment plan tho, the deposit locks in each person then $100/month installments till the final balance hits in December. want me to send the breakdown?",
   },
   {
     triggers: ['sell me', 'why yall', 'why springbreak u', 'why you', 'why should we choose you', 'why choose you', 'why your company', 'whats different about you'],
@@ -331,7 +331,9 @@ export const FAQ: FaqEntry[] = [
   {
     triggers: ['can i add someone', 'add to room', 'friend wants to join', 'add person'],
     answer:
-      "yup we can add them to your reservation. they just need to deposit $100 to lock in their spot",
+      "yup, people can join as long as there are rooms available. just heads up they'll pay whatever the current pricing is when they deposit, not what you locked in. your price is locked once you deposit, theirs is locked when they deposit",
+    notes:
+      'V4.5 Section 4: friend price is NOT guaranteed to match the leader. The price-lock is per-deposit, not per-group. Include the availability anchor "as long as there are rooms available" — never "people can hop in whenever".',
   },
   {
     triggers: ['someone dropped', 'friend bailed', 'down to fewer', 'group shrunk'],
@@ -362,6 +364,300 @@ export const FAQ: FaqEntry[] = [
     notes:
       'Scam pushback. Concise + BBB credibility. No long explanation about ops team, payment flow, etc. Keep it tight.',
   },
+  // ---- v4.5 GROUP COORDINATION (Avery + 84-convo learnings) ----
+  // 87% of cold leads in our corpus had group-coordination friction.
+  // Surface proactive moves: equip the lead to sell their group rather
+  // than waiting passively for them to come back.
+  {
+    triggers: [
+      'share with my group',
+      'forward to my friends',
+      'send to my group',
+      'share the info',
+      'send to the group',
+      'pass along to',
+    ],
+    answer:
+      "yea fs, ill send the breakdown to your email. you can drop it straight in the group chat from there",
+    notes:
+      "Lead wants to share. Confirm the email-handoff path, give them the share-with-group ammo.",
+  },
+  {
+    triggers: [
+      'have to ask my parents',
+      'parents need to approve',
+      'parents are paying',
+      'check with my mom',
+      'check with my dad',
+      'my parents',
+    ],
+    answer:
+      "word no rush, parents are usually the deciding factor. ill send the breakdown over so they can see exactly whats included and how the payment plan works",
+    notes:
+      'Parent involvement = 11% of cold convos. Acknowledge, pivot to email so the parent has the breakdown in hand. Soften slang slightly when "parents" comes up. Phase 2 will add real parent tone-matching.',
+  },
+  // ---- v4.5 PRICING POSTURE & WAIT RECOVERY ----
+  {
+    triggers: [
+      'will the price be the same',
+      'price stay the same',
+      'will price change',
+      'price gonna change',
+      'is the price going up',
+      'price going up',
+      'will pricing change',
+    ],
+    answer:
+      "the sooner you deposit, the cheaper your trip. pricing only goes up from here as availability gets filled in. depositing now locks in what youre seeing right now",
+    notes:
+      'V4.5 Section 2.2 NON-NEGOTIABLE. NEVER answer with "yes price stays the same" — that single line destroys urgency. Pricing GOES UP, never stays the same, never comes back down.',
+  },
+  {
+    triggers: [
+      'will friends pay the same',
+      'will my friends get the same price',
+      'price for friends who join later',
+      'late joiner price',
+      'if my friends join later',
+      'friends join later',
+    ],
+    answer:
+      "cant guarantee that. theyll pay whatever the current pricing is when they hop in. your price is locked once you deposit, theirs is locked when they deposit",
+    notes:
+      'V4.5 Section 4. Price lock is per-deposit, NOT per-group. Be honest about this — friends do not auto-inherit the leader rate.',
+  },
+  {
+    triggers: [
+      'why did my price go up',
+      'price went up',
+      'why is the price higher',
+      'price increase',
+      'price changed',
+    ],
+    answer:
+      "few things can move it — early bird rates expire as we get closer, if a roommate drops the per person price shifts since theres fewer in the room, or if someone cancels and the spot gets re booked at the current rate. lmk the situation and ill see whats going on",
+    notes:
+      'V4.5 Section 4. Three causes: time, occupancy, cancellation/rebooking. Adapt to the situation — dont dump all three at once.',
+  },
+  {
+    triggers: [
+      'can i pay in full',
+      'pay full upfront',
+      'pay everything now',
+      'full payment now',
+      'pay it all',
+    ],
+    answer:
+      "yea fs, you can pay in full any time before the next payment date. the payment plan is the bare minimum timeline but you can get ahead anytime",
+    notes:
+      'V4.5 Section 4. Payment plan = floor, not ceiling.',
+  },
+  {
+    triggers: [
+      'cash deposit at the resort',
+      'cash deposit at check in',
+      'deposit at the hotel',
+      'security deposit',
+      'incidental at checkin',
+    ],
+    answer:
+      "no cash deposit at check in. there might be a small incidental hold from the resort that gets reimbursed at checkout. resort specific but typically returned in full",
+    notes:
+      'V4.5 Section 4.',
+  },
+  {
+    triggers: [
+      'custom payment',
+      'custom payment plan',
+      'different payment schedule',
+      'can we do a different plan',
+      'flexible payment',
+    ],
+    answer:
+      "sometimes we can finesse that for bigger groups. lemme check with my team on that and ill let you know",
+    notes:
+      'V4.5 Section 4. Sometimes approved for large groups. Flag for human — DO NOT promise it.',
+  },
+  {
+    triggers: [
+      'how does the free trip work',
+      'free trip details',
+      'group leader trip',
+      'organizer free',
+    ],
+    answer:
+      "every 14 travelers that finish paying = the 15th trip comped. value is the average cost of all the trips minus a $75 processing fee. reimbursed once everyone pays in full, so its full payment not just deposits that triggers it",
+    notes:
+      'V4.5 Section 4. FULL PAYMENT triggers it, not deposits. 14 paid → 15th free.',
+  },
+  {
+    triggers: [
+      'can i split the free trip',
+      'split the free trip',
+      'share the free trip',
+      'split the discount',
+    ],
+    answer:
+      "yea fs, you can take it yourself, split with a friend, or spread the discount across the whole group. up to you",
+    notes:
+      'V4.5 Section 4.',
+  },
+  {
+    triggers: [
+      'will my group see my free trip',
+      'will everyone see the free trip',
+      'is the free trip visible',
+      'group know about free',
+    ],
+    answer:
+      "no, the leader incentives arent visible on the portal or confirmations. handled separately",
+    notes:
+      'V4.5 Section 4.',
+  },
+  {
+    triggers: [
+      'what if i have 30 travelers',
+      '30 people',
+      '30+ travelers',
+      'second free trip',
+      'two free trips',
+    ],
+    answer:
+      "second free trip kicks in at 30+ fully paid",
+    notes:
+      'V4.5 Section 4.',
+  },
+  {
+    triggers: [
+      'someone is dropping out',
+      'someone wants to drop',
+      'friend dropping',
+      'one person backing out',
+      'someone cancelling',
+    ],
+    answer:
+      "all good. heads up that their payments are forfeited unless they got the travel insurance. their spot can reopen for someone else fresh tho, new account new payments from scratch. name changes arent allowed unfortunately, has to be a cancel and reopen",
+    notes:
+      'V4.5 Section 4. Forfeit without insurance. Spot can reopen. NO name changes.',
+  },
+  {
+    triggers: [
+      'will a dropout raise prices',
+      'if someone drops will prices go up',
+      'drop out raise our price',
+      'someone leaves price',
+    ],
+    answer:
+      "only if it changes the room occupancy. if someone fills the spot, pricing is unaffected",
+    notes:
+      'V4.5 Section 4.',
+  },
+  {
+    triggers: [
+      'temporary reserve',
+      'cant complete payment',
+      'payment wont go through',
+      'reservation stuck',
+    ],
+    answer:
+      "ahh thats a temporary reserve on the back end. lemme have my team clear that and try again right after, ill flag it now",
+    notes:
+      'V4.5 Section 4. Flag for human. Rep removes the temporary reserve on the back end.',
+  },
+  {
+    triggers: [
+      'card keeps getting declined',
+      'card declined',
+      'card not working',
+      'payment not going through',
+      'card wont work',
+    ],
+    answer:
+      "most of the time its a billing zip code or security code mismatch. make sure the zip matches exactly what your bank has on file. if its still failing send me a screenshot of the error and ill get it sorted",
+    notes:
+      'V4.5 Section 4. Billing zip / CVV mismatch is the usual cause.',
+  },
+  {
+    triggers: [
+      'email not recognized',
+      'my email isnt working',
+      'login not working',
+      'cant log in',
+    ],
+    answer:
+      "ahh you might have an account from a prior year. lemme have my team link them up real quick on our end",
+    notes:
+      'V4.5 Section 4. Flag for human to link accounts manually.',
+  },
+  {
+    triggers: [
+      'vouchers',
+      'voucher email',
+      'can i get all the vouchers',
+      'bulk vouchers',
+      'organizer vouchers',
+    ],
+    answer:
+      "vouchers go out to each traveler individually, cant bulk send to one person. they come out once all flights are submitted and balances are current",
+    notes:
+      'V4.5 Section 4.',
+  },
+  // ---- v4.5 WAIT / STALL handling (Section 2.6, 2.7) ----
+  {
+    triggers: [
+      'can i wait',
+      'i can wait',
+      'whats the rush',
+      'why now',
+      'no point doing it now',
+      'dont have to do anything now',
+    ],
+    answer:
+      "I mean you could, but pricing does go up as things fill. I cant guarantee youd see this same price when you come back. locking in now just means youre set",
+    notes:
+      'V4.5 Section 2.6 NON-NEGOTIABLE. NEVER concede with "technically yea" or "you could wait". Go directly to the reframe. Do not validate the wait premise.',
+  },
+  {
+    triggers: [
+      'ill just wait',
+      'i will just wait',
+      'ill wait',
+      'wait til november',
+      'wait til december',
+      'wait until later',
+    ],
+    answer:
+      "just keep in mind pricing does go up as things sell, I cant guarantee youll see this same price down the road. ill hit you up if I see prices moving or your week starting to fill up. that cool?",
+    notes:
+      'V4.5 Section 2.7: 2-step recovery. Step 1 reframe pricing, Step 2 follow-up hook. Never release passively without the hook. If they still insist after this, release with the hook attached: "totally your call, ill be here when youre ready. ill hit you up if I see prices moving or things selling out for your week".',
+  },
+  {
+    triggers: [
+      'when do things sell out',
+      'when do they sell out',
+      'when do trips fill up',
+      'when does this fill up',
+      'when do you sell out',
+    ],
+    answer:
+      "honestly it varies year to year, popular weeks fill faster than people expect. I wouldn't wait too long",
+    notes:
+      'V4.5 Section 2.5 MANDATORY PHRASE. Stays vague. NEVER give a specific safe-booking deadline like "October at the latest". If pushed: "hard to say exactly, but Id get it locked in sooner rather than later. ill let you know if I see things moving".',
+  },
+  {
+    triggers: [
+      'whats the benefit of reserving now',
+      'benefit of booking now',
+      'why deposit now',
+      'why should i lock in',
+      'what does the deposit get me',
+      'whats the point of depositing',
+    ],
+    answer:
+      "locks in your spot, your current price, and sets you up on the payment plan so youre not paying it all at once. pricing goes up as availability drops, so depositing now means youre set on all three",
+    notes:
+      'V4.5 Section 2.9 + Section 5 MANDATORY 3-PART ANSWER. Must include the price-lock half. Missing it is a non-negotiable error.',
+  },
 ];
 
 export const OBJECTIONS: FaqEntry[] = [
@@ -373,7 +669,7 @@ export const OBJECTIONS: FaqEntry[] = [
   {
     triggers: ['let me ask my group', 'need to talk to my friends', 'group decision', 'show my friends', 'not rlly sure'],
     answer:
-      "word all good, things are moving quickly already so we'll def want to get it in motion soon\nis it cool if i send the info through email? its a little long for text",
+      "word all good, things are moving quickly already so we'll def want to get it in motion soon\nis it cool if i send the info through email? its a little long for text and that way you can throw it in the group chat too",
   },
   {
     triggers: ['is this a scam', 'sketchy', 'too good to be true', 'how do i know this is real'],
