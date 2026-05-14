@@ -355,7 +355,7 @@ export const FAQ: FaqEntry[] = [
     answer:
       "yea lol. been doing this for a few years now, not a bad job lol. if you wanna set up a call just lmk",
     notes:
-      'V5 Section 1.8 + Section 5 mandatory phrase. The old "how\'d you find us, was it google?" deflection was killed in V5 testing (too clever, sounds deflecting). Rotate between these 3 lines naturally based on the moment: "yea lol. been doing this for a few years now, not a bad job lol. if you wanna set up a call just lmk" / "yea I am lol. this is literally what I do everyday" / "lol I wish I could tell you no" (playful, used in real booked convos). The call offer tail is required per Section 5 mandatory phrase table. Pick one, dont stack them.',
+      'V5 Section 1.8 + Section 5 mandatory phrase. The call-offer tail "if you wanna set up a call just lmk" is required per Section 5 mandatory phrase table. The old "how\'d you find us, was it google?" deflection was killed in V5 testing. Three accepted variants (pick based on the moment, NEVER stack two lines): (1) "yea lol. been doing this for a few years now, not a bad job lol. if you wanna set up a call just lmk" (default), (2) "yea I am lol. this is literally what I do everyday. if you wanna set up a call just lmk" (use mid-conversation when rapport already established), (3) "lol I wish I could tell you no. if you wanna set up a call just lmk" (use ONLY when the lead is playful first, never cold).',
   },
   {
     triggers: ['is this a scam', 'sketchy', 'too good to be true', 'how do i know this is real'],
@@ -526,6 +526,22 @@ export const FAQ: FaqEntry[] = [
       "second free trip kicks in at 30+ fully paid",
     notes:
       'V4.5 Section 4.',
+  },
+  {
+    triggers: [
+      'what do I get for bringing',
+      'whats the leader bonus',
+      'organizer bonus',
+      'group leader bonus',
+      'leader perks',
+      'what do I get if I bring',
+      'cash bonus for organizer',
+      'incentive for bringing',
+    ],
+    answer:
+      "depends on how many you bring fully paid. once you hit 15 your trip gets comped, 20 adds a 3-night party pass on top, 30 is 2 free trips. sub-15 tiers exist for early bookings too (cash bonuses at 6/8/10/12/14 travelers) but those are seasonal. lmk how big yall are lookin and ill confirm whats live",
+    notes:
+      'V2 Section 2 - Group Leader Incentive Breakdown. Pre-Sept early-booking cash tiers: 6=$50, 8=$75, 10=$125, 12=$175, 14=$275. From Sept on, do NOT openly offer sub-15 cash bonuses, only confirm the 15+ free-trip thresholds. All thresholds are FULLY PAID travelers, not deposited. Never volunteer this unsolicited per V2 rule "Do not make the free trip program the main hook for every lead".',
   },
   {
     triggers: [
