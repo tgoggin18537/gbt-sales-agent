@@ -32,7 +32,12 @@
  */
 
 const BANNED_OPENERS = [
-  /^\s*great question[!,.\s]/i,
+  // "great question" is banned as a generic AI-tell opener EXCEPT when
+  // it leads into the V5 Section 2.6 / Section 5 mandatory competitor
+  // counter-question: "great question, what other companies were you
+  // looking at?" — Spiffy's verbatim phrasing. The negative lookahead
+  // allows that one specific case through.
+  /^\s*great question(?!\s*,?\s*what other companies)[!,.\s]/i,
   /^\s*absolutely[!,.\s]/i,
   /^\s*that'?s a great point/i,
   /^\s*certainly[!,.\s]/i,

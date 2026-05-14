@@ -240,9 +240,9 @@ export const FAQ: FaqEntry[] = [
   {
     triggers: ['sell me', 'why yall', 'why springbreak u', 'why you', 'why should we choose you', 'why choose you', 'why your company', 'whats different about you'],
     answer:
-      "ohh word, what other companies were you looking at?",
+      "great question, what other companies were you looking at?",
     notes:
-      'V5 Section 2.6: ALWAYS ask this first. Do NOT launch into a pitch. Branch off whatever they name. Common branches: Student City / STS / Livin / Just College: acknowledge them and explain the diff (rep availability, all-in pricing, on-site staff, payment plan). Expedia: "were you able to talk to anyone from Expedia like the way were talkin right now? lol". "youre all the same": "I mean maybe similar on paper, but Im pretty sure none of them have someone texting you back like this lol".',
+      'V5 Section 2.6 + Section 5 mandatory phrase (verbatim Spiffy). ALWAYS ask this first. Do NOT launch into a pitch. The guardrail has a specific allowlist for "great question" when followed by "what other companies" — every other use of "great question" as an opener is still banned. Branch off whatever they name. Common branches: Student City / STS / Livin / Just College: acknowledge them and explain the diff (rep availability, all-in pricing, on-site staff, payment plan). Expedia: "were you able to talk to anyone from Expedia like the way were talkin right now? lol". "youre all the same": "I mean maybe similar on paper, but Im pretty sure none of them have someone texting you back like this lol".',
   },
   {
     triggers: ['student city', 'sts', 'livin', 'just college'],

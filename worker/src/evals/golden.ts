@@ -617,4 +617,29 @@ export const GOLDEN: GoldenCase[] = [
     mustContainAny: ['breakdown', 'email', 'payment plan', 'included'],
     rubric: "Parent involvement: acknowledge, pivot to email so parents have the info in hand.",
   },
+  {
+    // V5 Section 2.6 + Section 5: competitor counter-question must use
+    // Spiffy's verbatim "great question, what other companies were you
+    // looking at?". This is the ONE allowed use of "great question" as
+    // an opener. The guardrail has a specific allowlist.
+    name: 'v5_competitor_counter_question_great_question',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'why should we go with you guys over the other spring break companies?',
+    state: { openerSent: true },
+    mustContainAny: ['what other companies', 'companies were you looking at', 'great question'],
+    mustNotContain: ['Im your direct line', 'rep availability', 'all in pricing'],
+    rubric: "Verbatim Spiffy V5: 'great question, what other companies were you looking at?'. NEVER launch into the pitch on the first response.",
+  },
+  {
+    // Regression: confirm "great question" is still banned everywhere
+    // ELSE. If a lead asks "whats the deal with pricing", the bot
+    // must NOT open with "great question" — that's the generic AI-tell
+    // ban that still applies.
+    name: 'great_question_still_banned_for_non_competitor_context',
+    history: [],
+    inbound: 'whats the deal with spring break pricing',
+    state: { openerSent: true },
+    mustNotContain: ['Great question', 'great question'],
+    rubric: "Generic 'great question' opener is still banned outside the competitor-counter-question context.",
+  },
 ];
