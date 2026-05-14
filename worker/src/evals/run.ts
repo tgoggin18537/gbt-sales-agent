@@ -45,15 +45,35 @@ async function runOne(apiKey: string, model: string, c: GoldenCase): Promise<Cas
 
   let draft = '';
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await callClaude({
-      apiKey,
-      model,
-      systemCached: SYSTEM_CACHED,
-      systemDynamic: turnCtx,
-      messages: history,
-      maxTokens: 300,
-      temperature: 0.7,
-    });
+    // Wrap the API call with a network-blip retry. The production integration
+    // already retries on 429/5xx HTTP responses, but socket-level errors
+    // (undici UND_ERR_SOCKET) bypass that loop because fetch() throws before
+    // any response. From this eval runner's host the Anthropic connection
+    // occasionally drops mid-run, so we retry the network-level failure here.
+    let res: { text: string; stopReason: string | null; usage: unknown } | null = null;
+    for (let net = 0; net < 4; net++) {
+      try {
+        res = await callClaude({
+          apiKey,
+          model,
+          systemCached: SYSTEM_CACHED,
+          systemDynamic: turnCtx,
+          messages: history,
+          maxTokens: 300,
+          temperature: 0.7,
+        });
+        break;
+      } catch (e: any) {
+        const isNetwork =
+          e?.cause?.code === 'UND_ERR_SOCKET' ||
+          /fetch failed|socket|ECONNRESET|ETIMEDOUT/i.test(String(e?.message ?? e));
+        if (!isNetwork || net === 3) throw e;
+        const backoff = 500 * Math.pow(2, net);
+        console.warn(`   [retry] network blip on ${c.name}, waiting ${backoff}ms before attempt ${net + 2}/4`);
+        await new Promise((r) => setTimeout(r, backoff));
+      }
+    }
+    if (!res) throw new Error('callClaude returned undefined after retries');
     const guard = applyGuardrail({
       candidate: res.text,
       linkSendCountBefore: c.state.linkSendCount ?? 0,

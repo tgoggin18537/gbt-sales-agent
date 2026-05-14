@@ -86,7 +86,11 @@ export const GOLDEN: GoldenCase[] = [
     inbound: 'whos gonna help me on site',
     state: { openerSent: true },
     mustNotContain: ['Vivian', 'Ashton', 'Aleesa', 'Manuel', 'Justin Rodriguez', 'Tony'],
-    mustContainAny: ['our team', 'the team on the ground', 'on site', "our staff", "24/7"],
+    // Note: the bot is allowed to qualify back ("which destination were you lookin at?")
+    // instead of answering with "our team on the ground" immediately. Primary intent
+    // is the negative check — no staff names. Positive phrasing is preferred but not
+    // required, since the bot may legitimately ask destination first.
+    rubric: 'No staff names should ever appear. Bot may either answer with team framing OR qualify destination first.',
   },
   {
     name: 'zero_emoji_after_opener',
@@ -198,9 +202,12 @@ export const GOLDEN: GoldenCase[] = [
     history: [],
     inbound: 'whats the deposit to lock in',
     state: { openerSent: true },
-    mustContainAny: ['$200', '200'],
-    mustNotContain: ['$50', '$500', '$1000'],
-    rubric: 'Deposit is $200 (transcript-confirmed). Must not quote $50 (old KB doc) or other amounts.',
+    // v4.5 update: deposit amount varies by season, group size, and promo. Frame as
+    // "right now its $X" with NO future-date guarantee. $100 = early-season standard,
+    // $200 = late-season standard, both legitimate depending on when this fires.
+    mustContainAny: ['$100', '$200', '100 per person', '200 per person', 'right now'],
+    mustNotContain: ['$50', '$500', '$1000', 'after jan 1', 'after january 1', 'until jan 1'],
+    rubric: 'Deposit is current-rate ($100 early-season or $200 late-season). NO calendar anchor allowed.',
   },
   {
     name: 'age_requirement_hotel_specific',
@@ -319,10 +326,10 @@ export const GOLDEN: GoldenCase[] = [
       { role: 'assistant', content: SPIFFY_OPENER },
       {
         role: 'user',
-        content: "March 2-9 in Cabo for 6 of us from Texas, lookin to book this week",
+        content: "March 2-9 in Cabo for 6 of us from University of Michigan, lookin to book this week",
       },
     ],
-    inbound: "March 2-9 in Cabo for 6 of us from Texas, lookin to book this week",
+    inbound: "March 2-9 in Cabo for 6 of us from University of Michigan, lookin to book this week",
     state: { openerSent: true },
     mustNotContain: [
       'which week',
@@ -556,8 +563,10 @@ export const GOLDEN: GoldenCase[] = [
     inbound: 'one of my friends might drop out, what happens?',
     state: { openerSent: true },
     mustContainAny: ['insurance', 'forfeit', 'travel insured', 'reopen', 'cancel', 'spot can'],
-    mustNotContain: ['name change'],
-    rubric: "Drop-out: forfeit without insurance, spot reopens fresh, no name changes.",
+    // Block the PROMISE of a name change, not the policy mention. v4.5 KB
+    // explicitly tells the bot to say "name changes arent allowed".
+    mustNotContain: ['we can do a name change', 'we can change the name', 'can change the name on the reservation'],
+    rubric: "Drop-out: forfeit without insurance, spot reopens fresh, no name change PROMISES.",
   },
   {
     name: 'v45_free_trip_full_payment_not_deposit',
