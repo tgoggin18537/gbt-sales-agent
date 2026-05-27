@@ -510,6 +510,44 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
     }
   }
 
+  // 8b. Bot/Real polarity guard (V5.5 Section 1.6 — May 22 findings).
+  //     If the inbound is asking "are you a bot?" / "is this AI?" /
+  //     "is this automated?" — affirming bot-ness — the reply MUST
+  //     contain an explicit "no" or "Im real" framing. A reply that
+  //     starts "yea" / "yes" / "yup" or contains "Im a bot" is a
+  //     catastrophic polarity flip. This is the bug that broke Hannah's
+  //     thread when the bot replied "yea lol" to "are you a bot?".
+  if (input.inboundText) {
+    const inb = input.inboundText.toLowerCase();
+    const asksBotPolarityYes =
+      /\b(?:are you|is this|youre|you're|are u)\s+(?:a\s+)?(?:bot|ai|chatbot|automated|robot)\b/.test(inb) ||
+      /\bis\s+this\s+(?:automated|a\s+bot|an\s+ai)\b/.test(inb);
+    if (asksBotPolarityYes) {
+      const txtLower = text.toLowerCase();
+      const hasExplicitNo =
+        /\bno\s+lol\b/.test(txtLower) ||
+        /\bno,?\s+(?:i'?m|im)\s+real\b/.test(txtLower) ||
+        /\b(?:i'?m|im)\s+real\s+lol\b/.test(txtLower) ||
+        /^\s*nah\b/.test(txtLower);
+      const hasYesAffirmation =
+        /^\s*(?:yea|yeah|yes|yup|yup lol|yea lol|yes lol)\b/.test(txtLower);
+      if (hasYesAffirmation && !hasExplicitNo) {
+        return {
+          ok: false,
+          reason: 'bot/real polarity flip: lead asked "are you a bot?" (affirming bot-ness) and reply opens with "yea/yes/yup" without explicit "no Im real" framing. This affirms the bot is a bot. Rewrite with "no lol, Im real" or similar explicit denial.',
+          violations: [...violations, 'bot_polarity_flip'],
+        };
+      }
+      if (!hasExplicitNo) {
+        return {
+          ok: false,
+          reason: 'bot/real polarity: lead asked "are you a bot?" — reply must include an explicit "no" / "Im real" denial. Required phrasing: "no lol, Im real. been doing this for a few years now. if you wanna set up a call just lmk"',
+          violations: [...violations, 'bot_polarity_missing_no'],
+        };
+      }
+    }
+  }
+
   // 9. Apostrophe density rewrite. Spiffy drops apostrophes ~40% of
   //    the time ("thats", "ill", "im", "dont"). If too many
   //    contractions have apostrophes the text reads too proper.

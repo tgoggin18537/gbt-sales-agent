@@ -670,7 +670,9 @@ export const GOLDEN: GoldenCase[] = [
     inbound: 'should I book my flight now or wait for prices to come down?',
     state: { openerSent: true },
     mustNotContain: ['that\'s on you', 'thats on you', 'I just handle the trip side', 'not my area'],
-    mustContainAny: ['Google Flights', 'earlier', 'price tracker', 'unpredictable', 'help'],
+    // Tightened: require either Google Flights mention OR specific
+    // earlier-is-cheaper framing. "help" alone is too lenient.
+    mustContainAny: ['Google Flights', 'price tracker', 'unpredictable', 'earlier you book', 'sometimes they dip'],
     rubric: "Flight advice must be helpful. Google Flights / earlier-is-cheaper framing.",
   },
   {
@@ -715,7 +717,10 @@ export const GOLDEN: GoldenCase[] = [
     inbound: 'can I change the dates after I book?',
     state: { openerSent: true },
     mustNotContain: ['lemme check with my team', 'I\'ll need to check', 'tbh not 100% sure'],
-    mustContainAny: ['yea', 'we can', 'finesse', 'within a reasonable', 'adjust'],
+    // Tightened: require either "finesse" (Spiffy's word) or "within
+    // a reasonable" framing or explicit "we can"+"adjust"/"change".
+    // "yea" alone is too broad.
+    mustContainAny: ['finesse', 'within a reasonable', 'we can change', 'we can adjust', 'reasonable amount of time'],
     rubric: "Date change is allowed. Answer yes with reasonable-window framing.",
   },
   {
@@ -726,7 +731,10 @@ export const GOLDEN: GoldenCase[] = [
     inbound: 'can I pay for everyone in my group at once?',
     state: { openerSent: true },
     mustNotContain: ['not 100% sure', 'ill confirm with my team', 'tbh I\'d have to check'],
-    mustContainAny: ['yea we can', 'we can make that happen', 'ready', 'reservation'],
+    // Tightened: require both the affirmative AND the reservation
+    // pivot ("ready to get the reservation started" or similar).
+    // "ready" alone is too broad.
+    mustContainAny: ['we can make that happen', 'reservation started', 'get the reservation', 'lock that in', 'set that up'],
     rubric: "'Pay for everyone' is a buy-in closing signal. Pivot to reservation, don't defer to human.",
   },
   {
@@ -740,7 +748,9 @@ export const GOLDEN: GoldenCase[] = [
     inbound: 'what if I don\'t want a second free trip',
     state: { openerSent: true, week: 'march 6', groupSize: '30', destination: 'Punta Cana' },
     mustNotContain: ['hmm good one', 'lemme think', 'let me think on that', 'let me check on that'],
-    mustContainAny: ['spread the discount', 'party pass', 'across the whole group', 'more perks', 'up to you'],
+    // Tightened: require the actual KB answer content. "up to you"
+    // alone is too generic.
+    mustContainAny: ['spread the discount', 'across the whole group', 'more perks', 'earn more', 'spread across'],
     rubric: "Answer must fire immediately. NEVER 'hmm good one lemme think'. Answer is in the KB.",
   },
   {
@@ -799,5 +809,86 @@ export const GOLDEN: GoldenCase[] = [
     state: { openerSent: true },
     mustContainAny: ['@springbreaku_', 'springbreaku_', '@gobluetours', 'gobluetours'],
     rubric: "IG/TikTok handles hardcoded: @springbreaku_ and @gobluetours.",
+  },
+  {
+    // Section 1.3 — canonical Jacob Sakari multi-PART case. Lead
+    // sends school + Riu question in one message. Bot must address
+    // BOTH. Old failure: bot answered school part only, ignored Riu.
+    name: 'v55_multi_part_salve_riu_canonical',
+    history: [
+      { role: 'assistant', content: SPIFFY_OPENER },
+      { role: 'user', content: 'march 6 week, 6 of us going to Cabo' },
+      { role: 'assistant', content: 'okay bet, Cabo is a vibe. how many ppl in your group?' },
+      { role: 'user', content: 'sent that already, 6' },
+      { role: 'assistant', content: 'which school yall from' },
+    ],
+    inbound: 'We go to Salve, is the Riu Santa Fe available?',
+    state: { openerSent: true, week: 'march 6', destination: 'Cabo', groupSize: '6' },
+    // The bot's reply must address BOTH the school (Salve gas-up)
+    // AND the Riu question (yes available + 21+ requirement).
+    // Soft check: needs to mention Riu/Santa Fe and 21+ somewhere.
+    mustContainAny: ['Riu Santa Fe', 'Santa Fe', 'Riu'],
+    // And shouldn't ONLY do the school gas-up — must reference the
+    // 21+ requirement which is the Riu-specific fact.
+    rubric: "Multi-PART question: bot MUST address both the school (Salve gas-up) AND the Riu Santa Fe question (availability + 21+ requirement). Old failure: pattern-matched on school only.",
+  },
+  {
+    // Section 1.6 — the specific anti-pattern Hannah saw. Bot replied
+    // "yea lol" + a continuation that affirms bot-ness in spirit.
+    // Even with extra context, "yea lol" reply to "are you a bot?"
+    // is wrong polarity. Guardrail 8b should catch this.
+    name: 'v55_are_you_a_bot_with_yea_continuation',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'wait, are you a bot?',
+    state: { openerSent: true },
+    // Must contain explicit NO (not just "yea" + handwave).
+    mustContainAny: ['no lol', 'no Im real', 'no im real', 'no, Im real', 'no, im real'],
+    // Must NOT start with "yea" — that's polarity-flip.
+    mustNotContain: ['yea lol', 'yes lol', 'yup lol', 'haha yea'],
+    rubric: "Reply to 'are you a bot?' must contain explicit NO + Im-real. NO starting with 'yea' affirmation, even with disambiguating context.",
+  },
+  {
+    // Section 2.5 — Free trip group-size context. When state.groupSize
+    // is known and < 15, bot should reframe with gap urgency, not the
+    // cold "once 15 finish paying" template.
+    name: 'v55_free_trip_group_size_context',
+    history: [
+      { role: 'assistant', content: SPIFFY_OPENER },
+      { role: 'user', content: 'march 6, 12 of us going to Punta' },
+      { role: 'assistant', content: 'oh dope, 12 from yall sounds solid. which school yall from?' },
+      { role: 'user', content: 'BU' },
+    ],
+    inbound: 'do I get any kind of free trip if I bring this many people?',
+    state: { openerSent: true, week: 'march 6', destination: 'Punta Cana', groupSize: '12', school: 'BU' },
+    // With 12 in state and lead asking, bot should reference the
+    // gap-to-15 framing OR cite the 12-person cash tier ($175).
+    mustContainAny: ['get your group up to 15', 'up to 15', 'finish paying', '$175', '15 fully paid'],
+    rubric: "Free trip answer must reflect known group size. With 12 in state, frame as gap-to-15 OR cite the $175 cash tier for 12 travelers.",
+  },
+  {
+    // Section 2.1 — Convince a friend should PROBE, not "just send
+    // the breakdown".
+    name: 'v55_convince_friend_probes_first',
+    history: [
+      { role: 'assistant', content: SPIFFY_OPENER },
+      { role: 'user', content: 'march 6, 4 of us punta cana' },
+    ],
+    inbound: 'how do I convince my friend to come on this trip?',
+    state: { openerSent: true, week: 'march 6', destination: 'punta cana', groupSize: '4' },
+    mustNotContain: ['just send them the breakdown', 'send them the email', 'forward the email to them'],
+    mustContainAny: ['did yall do anything for spring break last year', 'what did yall do last year', 'last year', 'spring break last year'],
+    rubric: "Convince-a-friend must PROBE first ('did yall do anything for spring break last year?'). Sending the breakdown is a fallback, NOT the primary answer.",
+  },
+  {
+    // Section 2.2 — Deposit due must LEAD with "no hard deadline"
+    // not bury the answer under pricing-guarantee preamble.
+    name: 'v55_deposit_due_leads_with_direct_answer',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'when is the deposit due?',
+    state: { openerSent: true },
+    // First 30 chars of the reply should contain "no hard deadline"
+    // or similar direct framing — not start with the pricing preamble.
+    mustContainAny: ['no hard deadline', 'no hard global deadline', 'no real deadline'],
+    rubric: "Deposit-due answer must LEAD with 'no hard deadline'. Don't bury the answer under 'the pricing you have right now is guaranteed...' preamble.",
   },
 ];
