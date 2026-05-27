@@ -99,9 +99,17 @@ const BANNED_PHRASES: RegExp[] = [
   /\bpdf\b/i,
   // Filler stalls Spiffy never uses. "hmm good one let me think on that"
   // is the canonical bot tell flagged in section 2.3 of the V5 doc.
+  // V5.5 May 22: hardened — fired 3 times in one thread for questions
+  // bot already had answers to. Expanded variant coverage.
   /\bhmm,?\s+good\s+one\b/i,
+  /\bgood\s+one,?\s+lemme\s+think\b/i,
+  /\blemme\s+think\s+on\s+that\b/i,
   /\blet me think on that\b/i,
   /\blet me check on that\b/i,
+  /\blemme\s+check\s+on\s+that\b/i,
+  // The old "not a bad job lol" filler tail on are-you-real — V5.5 1.6
+  // killed this. It signals scripted.
+  /\bnot a bad job lol\b/i,
   // Cold "what's your email" ask. The only acceptable phrasing is the
   // softened versions; the cold ask is BANNED per section 1.3.
   /\bwhat'?s your email\b/i,
@@ -115,6 +123,25 @@ const BANNED_PHRASES: RegExp[] = [
   /\b15\+?\s+(?:confirmed\s+)?depositors?\b/i,
   // Krystal Cancun is CHILL not party — section 3.1 correction.
   /\bKrystal\b[^.]*\bparty\s+resort\b/i,
+  // ---- SPIFFY V5.5 BANS (May 22 findings PDF) ----
+  // Section 1.4 — flights flip. We CAN book flights. The old "we dont
+  // handle flights" / "I just handle the trip side" / "thats on you"
+  // framings push the lead away at the worst moment. All BANNED.
+  /\bwe\s+don'?t\s+(?:handle|book)\s+flights\b/i,
+  /\bI\s+(?:just|only)\s+handle\s+(?:the\s+)?trip\s+side\b/i,
+  /\bthat'?s\s+on\s+you\s+to\s+watch\b/i,
+  /\bthat'?s\s+on\s+you\b(?!\s+to\s+(?:decide|choose))/i,
+  // Section 1.5 — Occidental naming. Always "Occidental Punta Cana",
+  // never reversed.
+  /\bPunta\s+Cana\s+(?:at|@)\s+Occidental\b/i,
+  /\bPunta\s+Cana\s+\(Occidental\)/i,
+  // Section 1.6 — answering "yea lol" to "are you a bot" is
+  // catastrophic. The model affirming bot-ness can't easily be
+  // caught by regex alone, but we can block the most direct version:
+  // a reply that ONLY says "yea lol" / "yes lol" with no context is
+  // ambiguous and dangerous given polarity risk. Reject so the model
+  // retries with explicit "no lol Im real" or "yea Im real lol" form.
+  /^\s*ye(?:a|ah|s)\s+lol\.?\s*$/i,
   // ---- SPIFFY v4.5 PRICING POSTURE BANS (May 13 feedback PDF) ----
   // The single biggest urgency lever. Saying any of these once destroys
   // the entire pricing-goes-up posture for the rest of the conversation.

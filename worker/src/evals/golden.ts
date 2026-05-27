@@ -642,4 +642,162 @@ export const GOLDEN: GoldenCase[] = [
     mustNotContain: ['Great question', 'great question'],
     rubric: "Generic 'great question' opener is still banned outside the competitor-counter-question context.",
   },
+  // ---- v5.5 May 22 findings regression cases ----
+  {
+    // Section 1.4 — flights flip. Bot used to say "we dont handle
+    // flights" — now we CAN book them, just usually advise booking
+    // independently.
+    name: 'v55_flights_we_can_book_them',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'can you book my flights too?',
+    state: { openerSent: true },
+    mustNotContain: [
+      'we don\'t handle flights',
+      'we dont handle flights',
+      'I just handle the trip side',
+      'thats on you',
+      'that\'s on you',
+    ],
+    mustContainAny: ['yea we can', 'we can', 'cheaper', 'on your own', 'up to you', 'convenience'],
+    rubric: "Flights — we CAN book them. NEVER push away. Mention cheaper on their own as default but offer convenience option.",
+  },
+  {
+    // Section 1.4 — flight advice. The "should I book now or wait"
+    // question should be helpful (offer Google Flights price tracker),
+    // not push the lead away.
+    name: 'v55_flight_timing_advice_helpful',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'should I book my flight now or wait for prices to come down?',
+    state: { openerSent: true },
+    mustNotContain: ['that\'s on you', 'thats on you', 'I just handle the trip side', 'not my area'],
+    mustContainAny: ['Google Flights', 'earlier', 'price tracker', 'unpredictable', 'help'],
+    rubric: "Flight advice must be helpful. Google Flights / earlier-is-cheaper framing.",
+  },
+  {
+    // Section 1.6 — Bot/Real polarity detection. Asking "are you a bot?"
+    // must answer NO. The old failure was the bot saying "yea lol" which
+    // is affirming bot-ness.
+    name: 'v55_are_you_a_bot_polarity_no',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'are you a bot?',
+    state: { openerSent: true },
+    mustContainAny: ['no lol', 'no Im real', 'no im real', 'no, Im real'],
+    mustNotContain: ['yea lol.', 'yes lol.', 'not a bad job lol'],
+    rubric: "Are-you-a-BOT must answer NO. Polarity detection. Catastrophic if it answers yes.",
+  },
+  {
+    // Section 1.6 — Or-question polarity. "Are you an AI or a real
+    // person?" — bot must affirm REAL, not ambiguously "yea lol".
+    name: 'v55_ai_or_real_or_question',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'are you an AI or a real person?',
+    state: { openerSent: true },
+    mustContainAny: ['Im real', 'im real', 'real person', 'a real person'],
+    mustNotContain: ['not a bad job lol'],
+    rubric: "Or-question polarity: must explicitly say 'Im real' not just 'yea lol'.",
+  },
+  {
+    // Section 2.4 — Cartel / Mexico safety question. CRITICAL ready
+    // answer. Bot used to stall with "hmm good one lemme think".
+    name: 'v55_cartel_safety_ready_answer',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'is Cancun safe? I saw a bunch of stuff about the cartels in Mexico last year',
+    state: { openerSent: true },
+    mustNotContain: ['hmm good one', 'lemme think on that', 'let me think on that', 'let me check on that'],
+    mustContainAny: ['fair concern', 'resort zone', 'bubble', 'staff on the ground', 'no issues', 'other parts of Mexico'],
+    rubric: "Cartel safety must fire immediately with ready answer. NEVER stall with 'hmm good one'.",
+  },
+  {
+    // Section 2.10 — Can I change dates? Bot used to defer to human.
+    // Now answers yes with sales-angle framing.
+    name: 'v55_change_dates_after_book',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'can I change the dates after I book?',
+    state: { openerSent: true },
+    mustNotContain: ['lemme check with my team', 'I\'ll need to check', 'tbh not 100% sure'],
+    mustContainAny: ['yea', 'we can', 'finesse', 'within a reasonable', 'adjust'],
+    rubric: "Date change is allowed. Answer yes with reasonable-window framing.",
+  },
+  {
+    // Section 2.11 — Pay for everyone at once is a buy-in signal. Bot
+    // used to defer to human; should now treat as closing signal.
+    name: 'v55_pay_for_everyone_buyin_pivot',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'can I pay for everyone in my group at once?',
+    state: { openerSent: true },
+    mustNotContain: ['not 100% sure', 'ill confirm with my team', 'tbh I\'d have to check'],
+    mustContainAny: ['yea we can', 'we can make that happen', 'ready', 'reservation'],
+    rubric: "'Pay for everyone' is a buy-in closing signal. Pivot to reservation, don't defer to human.",
+  },
+  {
+    // Section 1.1 + 2.6 — "Hmm good one" eliminated. The 'what if I
+    // don't want a second free trip' answer should fire immediately.
+    name: 'v55_no_hmm_good_one_filler',
+    history: [
+      { role: 'assistant', content: SPIFFY_OPENER },
+      { role: 'user', content: 'march 6, 30 of us going to Punta' },
+    ],
+    inbound: 'what if I don\'t want a second free trip',
+    state: { openerSent: true, week: 'march 6', groupSize: '30', destination: 'Punta Cana' },
+    mustNotContain: ['hmm good one', 'lemme think', 'let me think on that', 'let me check on that'],
+    mustContainAny: ['spread the discount', 'party pass', 'across the whole group', 'more perks', 'up to you'],
+    rubric: "Answer must fire immediately. NEVER 'hmm good one lemme think'. Answer is in the KB.",
+  },
+  {
+    // Section 2.7 — Voucher info comes after BOOKING (payments
+    // complete), NOT after landing. Use "once youre all booked".
+    name: 'v55_airport_transfers_once_booked',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'how do I find the airport transfers once I land?',
+    state: { openerSent: true },
+    mustNotContain: ['once you land', 'when you land youll get'],
+    mustContainAny: ['once youre all booked', 'voucher', 'transportation team', 'be there to meet', 'available to text'],
+    rubric: "Voucher = post-booking, NOT post-landing. Must include 'once youre all booked' + the 'ill be available to text' tail.",
+  },
+  {
+    // Section 2.8 — Insurance pricing factors must NOT include "age".
+    // Correct factors: state, total trip cost, and other details.
+    name: 'v55_insurance_no_age_factor',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'how much is the insurance?',
+    state: { openerSent: true },
+    mustNotContain: ['depends on your age', 'age, state', 'your age and state'],
+    mustContainAny: ['$50', '$150', 'Travel Insured', 'state', 'varies'],
+    rubric: "Insurance pricing factors: state, trip cost, other details. NEVER 'age' — age was never in scope.",
+  },
+  {
+    // Section 1.5 — Occidental naming. Always "Occidental Punta Cana"
+    // never "Punta Cana at Occidental" or "Punta Cana (Occidental)".
+    name: 'v55_occidental_naming_order',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'whats the best destination?',
+    state: { openerSent: true },
+    mustNotContain: [
+      'Punta Cana at Occidental',
+      'Punta Cana (Occidental)',
+      'Occidental, in Punta Cana',
+    ],
+    mustContainAny: ['Occidental Punta Cana', 'occidental punta cana'],
+    rubric: "Resort named in correct word order: Occidental Punta Cana. Never reversed.",
+  },
+  {
+    // Section 3.1 — DR visa question. New KB record.
+    name: 'v55_dr_visa_passport_only',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'do I need a visa for the DR?',
+    state: { openerSent: true },
+    mustNotContain: ['lemme check', 'not 100% sure'],
+    mustContainAny: ['no visa', 'passport', 'just a valid passport'],
+    rubric: "DR visa: no visa for US citizens, valid passport only.",
+  },
+  {
+    // Section 3.1 — Instagram/TikTok handles must be the hardcoded
+    // ones: @springbreaku_ and @gobluetours.
+    name: 'v55_instagram_handles_hardcoded',
+    history: [{ role: 'assistant', content: SPIFFY_OPENER }],
+    inbound: 'whats your instagram?',
+    state: { openerSent: true },
+    mustContainAny: ['@springbreaku_', 'springbreaku_', '@gobluetours', 'gobluetours'],
+    rubric: "IG/TikTok handles hardcoded: @springbreaku_ and @gobluetours.",
+  },
 ];

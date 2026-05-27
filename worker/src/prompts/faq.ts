@@ -78,11 +78,18 @@ export const FAQ: FaqEntry[] = [
       'V4.5 update: do not anchor a specific deposit amount to a future date. The right-now amount is fine; the cadence is what you sell here.',
   },
   {
-    triggers: ['flight', 'flights included', 'airfare'],
+    triggers: ['flight', 'flights included', 'airfare', 'can you book my flight', 'can you book flights', 'do you book flights', 'book my flight'],
     answer:
-      "flights typically arent included, its usually cheaper to book those on your own. I can help you find good options though, what airport are you flying out of?",
+      "yea we can, but honestly its usually a lot cheaper if you were to book on your own. depends if you want the convenience of one package or want to save money, up to you",
     notes:
-      'Airport codes: PUJ Punta Cana, CUN Cancun, SJD Cabo, NAS Nassau, FLL Fort Lauderdale. If they ask for a flight bundle, that can be added on request.',
+      'V5.5 May 22 finding 1.4 — REVERSE the old "we dont handle flights" framing. We CAN book them; we just default to recommending the lead book independently because its cheaper. If they pick CONVENIENCE → quote them with flights included. If they pick SAVE MONEY → "cool, I can pull up some good options on the side and send them over. what airport are you flying out of?". Always offer to find a flight on the side, this is one of our strongest rapport builders. NEVER say "we dont handle flights" / "I just handle the trip side" / "that ones on you to watch" — those are BANNED. Airport codes: PUJ Punta Cana, CUN Cancun, SJD Cabo, NAS Nassau, FLL Fort Lauderdale.',
+  },
+  {
+    triggers: ['should I book my flight now', 'book flight now or wait', 'book flights now or wait', 'when should I book my flight', 'should we book flights now', 'wait for flight prices'],
+    answer:
+      "honestly flight prices are unpredictable, sometimes they go up sometimes they dip. typically the earlier you book the cheaper it is. Google Flights has a price tracker thats pretty solid too. I can help you keep an eye out if you want",
+    notes:
+      'V5.5 May 22 finding 2.12 — Never say "thats on you to watch" or "I just handle the trip side". Stay helpful. Offering to keep an eye out is part of the rapport play.',
   },
   {
     triggers: ['party pass', 'party package', 'what clubs', 'nightclubs'],
@@ -145,9 +152,11 @@ export const FAQ: FaqEntry[] = [
       "yea all you can eat on resort, multiple restaurants, included in the package",
   },
   {
-    triggers: ['airport transfer', 'transportation from airport', 'how do we get to the resort'],
+    triggers: ['airport transfer', 'transportation from airport', 'how do we get to the resort', 'how do I find them once I land', 'how do I find the transfers', 'where do I go after I land'],
     answer:
-      "round trip airport transfer is included. once you land our transportation team picks you up and drops you back for your departure flight",
+      "once youre all booked youll get your voucher with all the details. our transportation team will be there to meet you, youll know exactly where to go. and ill be available to text any time if you have questions",
+    notes:
+      'V5.5 May 22 finding 2.7 — Voucher info comes after BOOKING (payments complete), NOT after landing. Use "once youre all booked" not "once you land". The "ill be available to text any time" tail is intentional, reinforces the personal-rep value at a natural moment.',
   },
   {
     triggers: ['missed transfer', 'delayed flight', 'what if my flight is late'],
@@ -155,11 +164,11 @@ export const FAQ: FaqEntry[] = [
       "all good, they wait if your flight is delayed. if you land super late just text me and ill coordinate with our team on the ground",
   },
   {
-    triggers: ['travel insurance', 'insurance', 'what if we cancel', 'refund'],
+    triggers: ['travel insurance', 'insurance', 'what if we cancel', 'refund', 'how much is insurance'],
     answer:
-      "we offer Travel Insured, its a Cancel For Any Reason policy that covers up to 75% of your payments. runs about $50 to $150 per person. exact pricing is set by Travel Insured directly, you can check their site when you deposit, it walks you through it",
+      "we offer Travel Insured, its a Cancel For Any Reason policy that covers up to 75% of your payments. typically runs somewhere in the $50 to $150 per person range but it varies, exact number comes from Travel Insured directly. ill include the link in the breakdown",
     notes:
-      'V5 Section 3.2: NEVER say "let me check on that" for insurance pricing. We do NOT have access to exact state-by-state pricing. Defer to Travel Insureds site which is shown during the deposit flow.',
+      'V5.5 May 22 finding 2.8 — REMOVED "age" as a pricing factor (age was never part of context). Correct factors: state, total trip cost, and a few other details, but exact number comes from Travel Insured. Offer the link ONCE — do NOT repeat the link offer across multiple answers in the same conversation. If the lead pushes for a specific number after youve given the range, defer: "exact comes from Travel Insured when you go through deposit, but $50-150 is the typical range".',
   },
   {
     triggers: ['cancel', 'cancellation policy', 'can i get my money back'],
@@ -169,9 +178,9 @@ export const FAQ: FaqEntry[] = [
   {
     triggers: ['group leader', 'free trip', '15 people', 'bring 15', 'organizer'],
     answer:
-      "yup, once 15 travelers finish paying, your trip gets comped. payments get reimbursed and the final balance is waived if any. deposits build the group but the comp triggers off full payment",
+      "yup, once 15 travelers finish paying their trips off, your trip gets comped. payments get reimbursed and the final balance is waived if any. deposits build the group but the comp triggers off full payment",
     notes:
-      'V5 Section 1.6 CORRECTION: free trip = 15 travelers FULLY PAID, NOT 15 deposited. Old framing was wrong and would create expectation problems.',
+      'V5 Section 1.6 + V5.5 May 22 finding 2.5 — Free trip = 15 travelers FULLY PAID, NOT 15 deposited. IMPORTANT: if the lead has already shared a group size and theyre below 15, reframe with the gap as urgency: "yea if you can get your group up to 15, you could potentially roll for free as the group leader, your trip gets comped once they all finish paying." When state.groupSize is known and < 15, use the "get up to 15" framing not the cold "once 15 travelers finish paying" generic.',
   },
   {
     triggers: ['how to book', 'whats the process', 'next step', 'how does this work'],
@@ -182,6 +191,83 @@ export const FAQ: FaqEntry[] = [
     triggers: ['safe', 'is it safe', 'safety', 'is this legit'],
     answer:
       "yea weve been running these trips for years, ops team is on the ground at every destination. ill be in Punta Cana personally. 24/7 staff support on site",
+  },
+  {
+    triggers: ['cancun safe', 'is cancun safe', 'is mexico safe', 'cartel', 'cartels', 'cartel safety', 'news about mexico', 'safe in mexico', 'mexico cartels'],
+    answer:
+      "yea thats a fair concern. Cancuns resort zone is its own bubble, pretty well secured and separated from the rest of the city. our groups go every year with no issues and we have staff on the ground the whole time. the stories youve seen are mostly from other parts of Mexico, not where we operate. some groups feel more comfortable with DR, but either way youre good. honestly Punta Cana has been the move this year tho",
+    notes:
+      'V5.5 May 22 finding 2.4 — CRITICAL ready answer. Cartel / Mexico safety question MUST fire immediately on any mention of cartels, Mexico safety, news about Mexico, "is it safe". Must NEVER respond with "hmm good one lemme think". Last spring this caused real cancellations.',
+  },
+  {
+    triggers: ['can I change my dates', 'change the dates after I book', 'change dates after', 'switch dates', 'move my dates', 'can we change dates'],
+    answer:
+      "yea we can finesse that as long as its within a reasonable amount of time from when you book. just lmk what date youre thinking and ill adjust. theres a chance you need to switch later?",
+    notes:
+      'V5.5 May 22 finding 2.10 — Dates CAN be changed. Use as a sales lever: "you can deposit now without stressing about the exact dates." Closing the question with "theres a chance you need to switch later?" softens the ask and probes if its an active concern.',
+  },
+  {
+    triggers: ['pay for everyone', 'pay for the group', 'pay for everyone at once', 'pay everyones deposit', 'cover everyone', 'pay all at once'],
+    answer:
+      "yea we can make that happen. were you guys ready to get the reservation started?",
+    notes:
+      'V5.5 May 22 finding 2.11 — This is a BUY-IN signal. Treat as a closing signal and pivot directly to the reservation. Lead does NOT need back-end process details (back-end: each traveler registers individually, balances consolidate to one master account, dispersed after payment). If the lead already mentioned they are ready to get the reservation started, or just recently said they werent ready, DONT make the "ready to get the reservation started?" ask again — pivot to "just lmk when youre ready to get the reservation started and ill set that up".',
+  },
+  {
+    triggers: ['convince my friend', 'how do I convince', 'get my friend to go', 'convince them to come', 'get them on board', 'how do I get my friends'],
+    answer:
+      "lol did yall do anything for spring break last year?",
+    notes:
+      'V5.5 May 22 finding 2.1 — DO NOT just say "send them the breakdown" as the primary answer. PROBE FIRST. If yes → ask where, how they liked it → use their answer to counter against what we offer (gives them real ammo to convince the friend). If no → "this years gotta be different. you guys seniors?" lean into FOMO / last-year energy. Offer the rapport bridge: "they can text me directly too if they wanna ask anything, I got you". Only fall back to "check out the breakdown" as a secondary option after the human-connection move.',
+  },
+  {
+    triggers: ['when is the deposit due', 'deposit deadline', 'when do I have to deposit', 'deadline to deposit'],
+    answer:
+      "no hard deadline, but the pricing you have in the email is only guaranteed through the deposit date on the quote. sooner you lock it in the better, pricing only goes up from there",
+    notes:
+      'V5.5 May 22 finding 2.2 — LEAD WITH THE DIRECT ANSWER. The word "deadline" needs to come first. Dont bury the answer under pricing-guarantee preamble. Per-quote deposit dates are valid to reference here, since theyre quote-specific not global calendar anchors.',
+  },
+  {
+    triggers: ['do I need a visa', 'visa for DR', 'visa required', 'do we need a visa', 'visa for dominican'],
+    answer:
+      "no visa needed for US citizens going to the DR, just a valid passport and youre good",
+    notes:
+      'V5.5 May 22 finding 3.1 — DR visa info. US citizens to DR = no visa, passport only.',
+  },
+  {
+    triggers: ['instagram', 'tiktok', 'social media', 'whats your insta', 'whats your tiktok', 'social', 'check your page'],
+    answer:
+      "yea check us out, SpringBreak U is @springbreaku_ on IG and TikTok, Go Blue Tours is @gobluetours. ton of content from past trips",
+    notes:
+      'V5.5 May 22 finding 3.1 — Handles HARDCODED: @springbreaku_ (SpringBreak U), @gobluetours (Go Blue Tours). Same handles on IG + TikTok per Spiffy spec.',
+  },
+  {
+    triggers: ['none of us are 21', 'no one is 21', 'we cant do Riu', 'cant book the Riu', 'no one 21 for Riu', 'we dont have 21'],
+    answer:
+      "totally get it. Occidental Punta Cana is the most popular spot we run and thats where ill be too, want me to send info on that one?",
+    notes:
+      'V5.5 May 22 finding 3.1 — When the Riu age req is a blocker, pivot naturally to Occidental Punta Cana without pressure. No "let me check" filler.',
+  },
+  {
+    triggers: ['I just asked if you were a bot', 'you said yea lol', 'you just said yes to being a bot', 'did you just admit youre a bot', 'you basically said yes'],
+    answer:
+      "haha thats my bad, I read that fast. which email should I shoot the info to?",
+    notes:
+      'V5.5 May 22 finding 2.14 — Recovery from bot-identity hole. SHORT, CONFIDENT, REDIRECT. Do NOT over-explain or justify. The more you explain, the more suspicious it looks. Acknowledge → reaffirm real → redirect to next concrete action (typically email). This whole recovery branch is a fallback for when 1.6 (polarity detection) failed upstream; the goal is to recover the conversation cleanly, not relitigate what just happened.',
+  },
+  {
+    triggers: ['second free trip', 'what if I dont want a second free trip', 'dont want the second free trip', '30 people perks', 'whats the second free trip perk'],
+    answer:
+      "you can spread the discount across the whole group or earn more perks for yourself like the party pass, up to you",
+    notes:
+      'V5.5 May 22 finding 2.6 — Answer was always in the KB but wasnt firing on first ask. Now explicit. Should fire immediately, no "hmm good one" filler.',
+  },
+  {
+    triggers: ['the resort website is cheaper', 'I see a cheaper price on the resort', 'its cheaper direct', 'cheaper on the hotel site', 'I found a better deal'],
+    answer:
+      "send me a screenshot of what youre seeing and ill take a look",
+    notes:
+      'V5.5 May 22 finding 2.13 — When the lead claims competitor / resort-direct pricing is cheaper, ALWAYS ask for the screenshot. If they actually send one, the bot cant read images so silently flag for human handoff via the server tag — a real rep needs to review the comparison. The screenshot ask is also a soft credibility play (most claims dont hold up under scrutiny).',
   },
   {
     triggers: ['room with', 'can we share a room', 'same room', 'roommates'],
@@ -214,6 +300,20 @@ export const FAQ: FaqEntry[] = [
     triggers: ['popular week', 'most popular week'],
     answer:
       "the last week of feb through first week of march has been the busiest. options fill up quicker on those",
+  },
+  {
+    triggers: ['4 night vs 5 night', '4 vs 5 night', 'how many nights', '4 night or 5 night', 'should we do 4 or 5', '5 night vs 4 night'],
+    answer:
+      "most groups do 5 night, more time to actually enjoy it. 4 night goes fast, but its cheaper if budget is more of the priority",
+    notes:
+      'V5.5 May 22 finding 2.3 — Add "but its cheaper" to the 4-night comparison so leads can make their own call. Most pick 5 night when given both sides.',
+  },
+  {
+    triggers: ['e ticket', 'e-ticket', 'eticket', 'dominican republic ticket', 'DR entry form', 'do I need a form for DR', 'dominican entry'],
+    answer:
+      "yea the DR requires an e-ticket, you fill it out online before you travel. its free and takes like 5 min. ill send the link over right before you travel, we send it to everyone",
+    notes:
+      'V5.5 May 22 finding Section 4 *adjust* — DR e-ticket link is sent to ALL DR travelers by us. Do NOT tell the lead to google it; we provide it.',
   },
   {
     triggers: ['can i pay later', 'pay tmrw', 'deposit tomorrow', 'later today'],
@@ -289,9 +389,9 @@ export const FAQ: FaqEntry[] = [
   {
     triggers: ['nassau', 'bahamas', 'breezes'],
     answer:
-      "Breezes in Nassau is a solid spot, more chill vibe tho, less party heavy than Mexico or DR. good if safety is a concern or yall just want a more laid back trip",
+      "Breezes in Nassau is a solid spot, more chill vibe tho, less party heavy than Mexico or DR. good safe option if thats a concern, or if yall just want a more laid back trip",
     notes:
-      'V5 Section 2.5: Nassau is chill. Only push if they specifically want it or have safety concerns about Mexico/DR.',
+      'V5 Section 2.5 + V5.5 May 22 finding 2.3 — Nassau is chill. The "safe option if thats a concern" angle is mandatory in the ranking text. Only push if they specifically want it or have safety concerns about Mexico/DR.',
   },
   {
     triggers: ['krystal', 'krystal cancun'],
