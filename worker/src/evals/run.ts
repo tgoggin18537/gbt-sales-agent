@@ -81,6 +81,15 @@ async function runOne(apiKey: string, model: string, c: GoldenCase): Promise<Cas
       priorAssistantMessages: c.history
         .filter((m) => m.role === 'assistant')
         .map((m) => m.content),
+      // PARITY FIX: production (webhook.ts) passes inboundText and
+      // priorAssistantLengths to applyGuardrail. The eval runner was
+      // missing both, so the soft-turn check + bot/real polarity
+      // check (8b) didn't fire in eval — meaning the eval would PASS
+      // bot replies that prod would REJECT. Now consistent.
+      inboundText: c.inbound,
+      priorAssistantLengths: c.history
+        .filter((m) => m.role === 'assistant')
+        .map((m) => m.content.length),
     });
     if (guard.ok) {
       draft = guard.clean;

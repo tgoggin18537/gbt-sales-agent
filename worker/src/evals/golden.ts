@@ -749,9 +749,10 @@ export const GOLDEN: GoldenCase[] = [
     state: { openerSent: true, week: 'march 6', groupSize: '30', destination: 'Punta Cana' },
     mustNotContain: ['hmm good one', 'lemme think', 'let me think on that', 'let me check on that'],
     // Tightened: require the actual KB answer content. "up to you"
-    // alone is too generic.
-    mustContainAny: ['spread the discount', 'across the whole group', 'more perks', 'earn more', 'spread across'],
-    rubric: "Answer must fire immediately. NEVER 'hmm good one lemme think'. Answer is in the KB.",
+    // alone is too generic. Bot can offer party pass OR cash credit
+    // OR other perks framing — all valid per the V4.5 KB.
+    mustContainAny: ['spread the discount', 'across the whole group', 'more perks', 'earn more', 'spread across', 'cash credit', 'party pass'],
+    rubric: "Answer must fire immediately. NEVER 'hmm good one lemme think'. Spread + perks/cash framing.",
   },
   {
     // Section 2.7 — Voucher info comes after BOOKING (payments

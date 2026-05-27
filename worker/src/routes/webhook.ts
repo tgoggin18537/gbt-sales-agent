@@ -328,18 +328,23 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
       const inboundForLog = messagesToProcess.map((m) => m.body).join(' || ');
 
       if (!candidate) {
-        // Guardrail never passed after N attempts. Ship a safe static fallback
-        // so the lead still gets a reply, and flag for human review with the
-        // full draft history so we can diagnose.
-        const FALLBACK = "hmm good one, lemme think on that real quick";
-        const sentFallback = await sendSms(
-          { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-          { contactId, message: FALLBACK },
-        );
+        // Guardrail never passed after N attempts. V5.5 Section 1.1
+        // CRITICAL FIX: the old fallback "hmm good one, lemme think
+        // on that real quick" is the EXACT banned phrase Spiffy
+        // demanded be removed forever. Per V5.5 1.1 Option B, when
+        // the bot genuinely can't answer, do NOT send any message —
+        // silently flag for human-takeover and let a rep step in.
+        // The contact note still captures the full draft history so
+        // we can diagnose, but the lead doesn't see anything.
         await addTag(
           { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
           contactId,
           'needs-human',
+        );
+        await addTag(
+          { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+          contactId,
+          'human-takeover',
         );
         const draftDump = attemptLog
           .map((a, i) => `  attempt ${i + 1}${a.reason ? ` (rejected: ${a.reason})` : ''}:\n    ${a.draft}`)
@@ -347,7 +352,7 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         await addContactNote(
           { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
           contactId,
-          `[Spiffy] Guardrail exhausted after ${maxAttempts} attempts. Sent fallback "${FALLBACK}". Inbound: "${inboundForLog}".\nDrafts:\n${draftDump}`,
+          `[Spiffy] Guardrail exhausted after ${maxAttempts} attempts. SILENT FALLBACK (no message sent per V5.5 1.1). Inbound: "${inboundForLog}".\nDrafts:\n${draftDump}`,
         );
         for (const msg of messagesToProcess) {
           await stub.fetch('https://do/append', {
@@ -357,12 +362,8 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
             }),
           });
         }
-        await stub.fetch('https://do/append', {
-          method: 'POST',
-          body: JSON.stringify({
-            message: { role: 'assistant', content: FALLBACK, at: Date.now(), ghlMessageId: sentFallback.messageId } as MiaMessage,
-          }),
-        });
+        // Do NOT append any assistant message — the conversation stays
+        // silent and a human picks it up.
         // Finalize: release lock, leave any newly-queued pending for the
         // next inbound (with needs-human tag, unlikely to fire again).
         const releaseRes = await stub.fetch('https://do/release', {
@@ -374,11 +375,11 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
           lockReleased: boolean;
           deferredCount: number;
         };
-        console.log(`[release] contact=${contactId} drained=0 depth=${depth} fallback=true deferred=${release.deferredCount}`);
+        console.log(`[release] contact=${contactId} drained=0 depth=${depth} silentFallback=true deferred=${release.deferredCount}`);
         succeeded = true;
         lastResponse = Response.json({
-          handled: 'guardrail_fallback',
-          sent: FALLBACK,
+          handled: 'guardrail_silent_fallback_human_needed',
+          sent: null,
           rejectedDrafts: attemptLog
             .filter((a) => a.reason)
             .map((a) => ({ reason: a.reason, draft: a.draft })),

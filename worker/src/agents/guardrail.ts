@@ -595,7 +595,16 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
   // 10. Rhythm variance. If the last 3 assistant messages were all in
   //     the same length band (within 40 chars of each other), the bot
   //     has fallen into a rigid rhythm. Reject to force variation.
-  if (input.priorAssistantLengths && input.priorAssistantLengths.length >= 2) {
+  //
+  //     V5.5 exception: commit moments ("lets do it", "ready to book",
+  //     "send the link", etc) REQUIRE a specific 3-detail confirmation
+  //     structure per V5 Section 1.5. That structure has an inherent
+  //     length range and shouldn't be subject to rhythm variance.
+  //     Same exception for explicit commit-driven moments where the
+  //     prompt mandates a structured reply.
+  const COMMIT_SIGNAL = /\b(?:lets do it|lets run it|im in|im down|send the link|lock it in|ready to book|how do we book|how do we lock|im ready|were ready|we're ready|lets go|lock me in)\b/i;
+  const isCommitMoment = input.inboundText ? COMMIT_SIGNAL.test(input.inboundText) : false;
+  if (input.priorAssistantLengths && input.priorAssistantLengths.length >= 2 && !isCommitMoment) {
     const recent = input.priorAssistantLengths.slice(-2);
     const currentLen = text.length;
     const allLengths = [...recent, currentLen];
