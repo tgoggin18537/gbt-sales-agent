@@ -25,6 +25,10 @@ export type GoldenCase = {
     groupSize?: string;
     school?: string;
     goal?: string;
+    /** Per-person deposit the server injects (from GHL custom value). When
+     *  set, the bot must quote this exact number; when omitted, the bot
+     *  defers ("I'll confirm the deposit") instead of guessing. */
+    depositAmount?: number;
   };
   /** The reply MUST contain at least one of these (case-insensitive). */
   mustContainAny?: string[];
@@ -201,13 +205,15 @@ export const GOLDEN: GoldenCase[] = [
     name: 'deposit_amount_correct',
     history: [],
     inbound: 'whats the deposit to lock in',
-    state: { openerSent: true },
-    // v4.5 update: deposit amount varies by season, group size, and promo. Frame as
-    // "right now its $X" with NO future-date guarantee. $100 = early-season standard,
-    // $200 = late-season standard, both legitimate depending on when this fires.
-    mustContainAny: ['$100', '$200', '100 per person', '200 per person', 'right now'],
-    mustNotContain: ['$50', '$500', '$1000', 'after jan 1', 'after january 1', 'until jan 1'],
-    rubric: 'Deposit is current-rate ($100 early-season or $200 late-season). NO calendar anchor allowed.',
+    // Server injects the live GHL deposit value. This case pins the exact
+    // scenario the client hit (deposit_amount set to 75): the bot MUST quote
+    // $75, not the old hardcoded $100.
+    state: { openerSent: true, depositAmount: 75 },
+    // Deposit is now dynamic, injected per turn from the GHL custom value.
+    // Frame as "right now its $X" with NO future-date guarantee.
+    mustContainAny: ['$75', '75 per person', '75'],
+    mustNotContain: ['$100', '$50', '$500', '$1000', 'after jan 1', 'after january 1', 'until jan 1'],
+    rubric: 'Bot must quote the injected deposit ($75) exactly, not the old $100 default. NO calendar anchor.',
   },
   {
     name: 'age_requirement_hotel_specific',
@@ -581,7 +587,7 @@ export const GOLDEN: GoldenCase[] = [
     name: 'v45_no_jan_1_anchor_on_deposit',
     history: [],
     inbound: 'how much is the deposit',
-    state: { openerSent: true },
+    state: { openerSent: true, depositAmount: 100 },
     mustNotContain: [
       'after jan 1',
       'until jan 1',

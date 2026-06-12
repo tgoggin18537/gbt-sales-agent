@@ -321,12 +321,26 @@ export type GuardrailInput = {
 };
 
 export type GuardrailResult =
-  | { ok: true; clean: string; linkSentThisTurn: boolean; violations: string[] }
+  | { ok: true; clean: string; linkSentThisTurn: boolean; hypeSentThisTurn: boolean; violations: string[] }
   | { ok: false; reason: string; violations: string[] };
+
+// School gas-up sentinel. The prompt instructs the model to append [HYPE] to
+// the end of the school-compliment message (and only that message). We detect
+// it here to fire the `hype-up` GHL tag, then strip it so the lead never sees
+// it. Same mechanism as linkSentThisTurn. Case-insensitive, tolerates ( ) too.
+const HYPE_SENTINEL = /[*_~]*\s*[\[(]\s*hype\s*[\])]\s*[*_~]*/i;
 
 export function applyGuardrail(input: GuardrailInput): GuardrailResult {
   const violations: string[] = [];
   let text = input.candidate.trim();
+
+  // 0. School gas-up sentinel. Detect + strip before any other processing so
+  //    the length cap / whitespace passes operate on the clean text and the
+  //    token never ships to the lead.
+  const hypeSentThisTurn = HYPE_SENTINEL.test(text);
+  if (hypeSentThisTurn) {
+    text = text.replace(HYPE_SENTINEL, '').replace(/\s{2,}/g, ' ').trim();
+  }
 
   // 1. Strip dashes. Replace em/en-class with comma-space, soften
   //    letter-hyphen-letter to space. Preserve URL hyphens (URLs are
@@ -626,6 +640,7 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
     ok: true,
     clean: text,
     linkSentThisTurn: linkPresent,
+    hypeSentThisTurn,
     violations,
   };
 }

@@ -20,6 +20,7 @@ import {
   addTag,
   addContactNote,
   getContact,
+  getDepositAmount,
   sendSms,
   wasManualOutboundRecent,
 } from '../integrations/ghl';
@@ -242,6 +243,20 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
     return Response.json({ queued: true, pendingCount: claim.pendingCount });
   }
 
+  // Current per-person deposit, read once from the GHL location custom value
+  // {{custom_values.deposit_amount}} (cached 5 min in KV). Fetched here, after
+  // the short-circuits, so we don't spend the call on shutoff/opener/existing
+  // paths. Falls back to spiffy.ts's safe default if undefined.
+  let depositAmount: number | undefined;
+  try {
+    depositAmount = await getDepositAmount(
+      { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+      env.IDEMPOTENCY,
+    );
+  } catch (e) {
+    console.error('deposit custom-value fetch failed (using default):', e);
+  }
+
   // We hold the lock. Drain loop.
   let messagesToProcess: PendingMessage[] = (claim as {
     claimed: true;
@@ -267,6 +282,7 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         goal: currentState.goal,
         painPoint: currentState.painPoint,
         emailCaptured: currentState.emailCaptured,
+        depositAmount,
       });
       const history = currentState.messages.map((m) => ({
         role: m.role,
@@ -282,6 +298,7 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
       let candidate = '';
       let violations: string[] = [];
       let linkSentThisTurn = false;
+      let hypeSentThisTurn = false;
       const attemptLog: Array<{ draft: string; reason?: string }> = [];
       const guardHistory = [...history];
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -312,6 +329,7 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
           candidate = guard.clean;
           violations = guard.violations;
           linkSentThisTurn = guard.linkSentThisTurn;
+          hypeSentThisTurn = guard.hypeSentThisTurn;
           attemptLog.push({ draft: claudeRes.text });
           break;
         } else {
@@ -420,6 +438,11 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         { contactId, message: candidate },
       );
 
+      // Whether THIS send is the school gas-up and the `hype-up` tag should
+      // fire. Gated on the persisted hypeSent flag so it fires at most once
+      // per contact across drain passes / rapid-fire batches.
+      const fireHype = hypeSentThisTurn && !currentState.hypeSent;
+
       // Email capture: scan only the newest pending message body (the one
       // most likely to contain a freshly-typed email). Cheap regex, no harm
       // in running per pass.
@@ -447,6 +470,7 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
           message: { role: 'assistant', content: candidate, at: Date.now(), ghlMessageId: sent.messageId } as MiaMessage,
           linkSent: linkSentThisTurn,
           openerSent: true,
+          hypeSent: fireHype || undefined,
           newState: currentState.state === 'new' ? 'engaged' : undefined,
         }),
       });
@@ -459,6 +483,24 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
           contactId,
           ENGAGED_TAG,
         );
+      }
+
+      // Fire the `hype-up` tag the moment the bot sends the school gas-up
+      // message (detected via the [HYPE] sentinel the prompt appends and the
+      // guardrail strips). Gated on currentState.hypeSent so it fires at most
+      // once per contact, even across drain passes / rapid-fire batches, so
+      // any GHL workflow keyed on the tag doesn't trigger twice. Best-effort;
+      // never block the reply on a tag write. (fireHype computed above.)
+      if (fireHype) {
+        try {
+          await addTag(
+            { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+            contactId,
+            'hype-up',
+          );
+        } catch (err) {
+          console.error('Failed to add hype-up tag:', err);
+        }
       }
 
       // V5 #1.1: fire the breakdown-email workflow trigger on first email

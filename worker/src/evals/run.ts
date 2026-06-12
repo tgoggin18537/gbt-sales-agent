@@ -31,6 +31,7 @@ async function runOne(apiKey: string, model: string, c: GoldenCase): Promise<Cas
     destination: c.state.destination,
     groupSize: c.state.groupSize,
     school: c.state.school,
+    depositAmount: c.state.depositAmount,
   });
 
   const history = [...c.history, { role: 'user' as const, content: c.inbound }];

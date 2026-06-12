@@ -66,7 +66,7 @@ export const FAQ: FaqEntry[] = [
   {
     triggers: ['deposit', 'how much deposit', 'to reserve', 'to lock in'],
     answer:
-      "right now its $100 per person to lock in each spot, then $100/month installments, final balance due in December",
+      "right now its $[X] per person to lock in each spot, then $100/month installments, final balance due in December",
     notes:
       'V4.5 update: NEVER attach a future-date guarantee to the deposit amount. Frame as "right now its $X" not "$X until Jan 1". Late joiners pay current deposit + catch up to current installment stage. Do NOT freelance specific calendar dates for when the deposit changes.',
   },
@@ -185,7 +185,7 @@ export const FAQ: FaqEntry[] = [
   {
     triggers: ['how to book', 'whats the process', 'next step', 'how does this work'],
     answer:
-      "ill set up a reservation link for your group, each person hops on an open slot in a room, adds their own info, and makes their $100 deposit. once everyone is locked in we roll into the payment window",
+      "ill set up a reservation link for your group, each person hops on an open slot in a room, adds their own info, and makes their $[X] deposit. once everyone is locked in we roll into the payment window",
   },
   {
     triggers: ['safe', 'is it safe', 'safety', 'is this legit'],
@@ -795,7 +795,7 @@ export const OBJECTIONS: FaqEntry[] = [
   {
     triggers: ['too expensive', 'cant afford'],
     answer:
-      "yea I feel that. $100 locks in your spot then $100/month installments till the final balance in December. want me to send the breakdown?",
+      "yea I feel that. $[X] locks in your spot then $100/month installments till the final balance in December. want me to send the breakdown?",
   },
   {
     triggers: ['dont send a link', 'no link', 'dont want to click'],

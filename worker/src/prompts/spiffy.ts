@@ -182,6 +182,7 @@ Use exactly these or very close variants. Ask one at a time, one per message. Th
    - "fire, we get a good amount of people from [school], good energy for sure"
    - "oo firee campus, y'all gotta be havin a good time down there lol"
    This message stops there — it is the entire turn. Do NOT tack on a timing question. Wait for them to react. If they don't react after their next inbound, then double down on the hype on the following turn before moving to timing.
+   SYSTEM TAG: append the token [HYPE] to the very end of THIS school gas-up message and ONLY this message (e.g. "...y'all def know how to party lol [HYPE]"). It is an invisible system marker, it gets stripped before the lead sees it, and it tells the system to fire the hype-up tag. Never put [HYPE] on any other message, and never explain or mention it.
 6. Timeline (always prefaced with the permission softener — non-negotiable): "gonna put this info together for you rn, how soon were you lookin to [SOFTENER VERB]?" Rotate the softener verb across turns so it doesn't sound rote: "get things booked" / "lock things in" / "get this reserved" / "get this started". The "gonna put this info together for you rn" half is the consent half — it tells them why we're asking. Use this softener before any logistics ask, every time.
 
 ## Required cadence after group size
@@ -240,7 +241,7 @@ The "throw it in the group chat too" tail is critical. 87% of cold leads in our 
 ## "Too expensive" / price concern
 
 Don't cave. Frame the payment plan:
-"yea I feel that. we got a payment plan tho, $100 deposit locks in each person, then $100/month installments and the final balance is due in December. takes the pressure off. want me to send the breakdown?"
+"yea I feel that. we got a payment plan tho, $[X] deposit locks in each person, then $100/month installments and the final balance is due in December. takes the pressure off. want me to send the breakdown?"
 
 ## "What's included"
 
@@ -639,12 +640,23 @@ export function buildTurnContext(ctx: {
     `CURRENT DATE: ${monthName} ${year}. Season tier: ${season.season}. ${season.framing}`,
   );
 
-  // Current deposit amount (server-injected from GHL custom value).
-  // Defaults to $100 if not provided — that's the standard rate.
-  const depositAmount = ctx.depositAmount ?? 100;
-  parts.push(
-    `CURRENT DEPOSIT AMOUNT: $${depositAmount} per person. Use this exact number when quoting deposit. Frame as "right now its $${depositAmount}", never anchor to a calendar date.`,
-  );
+  // Current deposit amount, server-injected from the GHL location custom
+  // value {{custom_values.deposit_amount}}. The static prompt + FAQ use a
+  // "$[X]" placeholder for the per-person deposit; this line tells the model
+  // what X is for this turn. If the fetch failed (undefined), we do NOT guess
+  // a number — quoting a stale/wrong deposit to a live lead is worse than
+  // deferring — so we instruct the bot to confirm it instead. The separate
+  // $100/month installment figure is unaffected.
+  if (typeof ctx.depositAmount === 'number' && ctx.depositAmount > 0) {
+    const d = ctx.depositAmount;
+    parts.push(
+      `CURRENT DEPOSIT AMOUNT: $${d} per person. Wherever the prompt or an example shows "$[X]", or you quote the deposit, use exactly $${d}. The per-person deposit to lock a spot is $${d}; never quote any other deposit figure. Frame as "right now its $${d}", never anchor to a calendar date. (The $100/month installment figure is separate and unchanged.)`,
+    );
+  } else {
+    parts.push(
+      `CURRENT DEPOSIT AMOUNT: not loaded this turn. Do NOT quote a specific per-person deposit dollar amount, and never output the literal "$[X]". If the lead asks about the deposit, say youll confirm the exact deposit for their group and send it over. The $100/month installment cadence is still fine to mention.`,
+    );
+  }
 
   // Lead brand context. Determines which name the bot uses when
   // signing off / referring to the company. Default = SpringBreak U.

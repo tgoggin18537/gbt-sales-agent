@@ -37,6 +37,9 @@ export type MiaState = {
   usConfirmed?: boolean;
   linkSendCount: number;
   openerSent: boolean;
+  /** True once the school gas-up message + `hype-up` tag have fired, so we
+   *  never double-fire the tag across drain passes / rapid-fire batches. */
+  hypeSent?: boolean;
   messages: MiaMessage[];
   lastInboundGhlMessageId?: string;
   // Rapid-fire batching: in-flight lock + pending queue + replay-protection
@@ -98,6 +101,7 @@ export class ContactThread {
         usConfirmed?: boolean;
         newState?: MiaState['state'];
         openerSent?: boolean;
+        hypeSent?: boolean;
         lastInboundGhlMessageId?: string;
       };
       if (!this.data) return new Response('not initialized', { status: 409 });
@@ -115,6 +119,7 @@ export class ContactThread {
       if (body.usConfirmed !== undefined) this.data.usConfirmed = body.usConfirmed;
       if (body.newState) this.data.state = body.newState;
       if (body.openerSent) this.data.openerSent = true;
+      if (body.hypeSent) this.data.hypeSent = true;
       if (body.lastInboundGhlMessageId)
         this.data.lastInboundGhlMessageId = body.lastInboundGhlMessageId;
       await this.save();
