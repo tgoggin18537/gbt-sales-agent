@@ -21,6 +21,7 @@ import {
   addContactNote,
   getContact,
   getDepositAmount,
+  getRecentMessages,
   sendSms,
   wasManualOutboundRecent,
 } from '../integrations/ghl';
@@ -150,19 +151,41 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
       .filter((m) => m.role === 'assistant' && !!m.ghlMessageId)
       .map((m) => m.ghlMessageId as string),
   );
-  const manualDetected = await wasManualOutboundRecent(
-    { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-    contactId,
-    botGhlMessageIds,
-    600,
-  );
-  if (manualDetected) {
-    await addTag(
+
+  // FIRST-TURN EXEMPTION (June 16 bugfix):
+  // When the bot has never engaged this contact (zero tracked assistant
+  // messages in the DO), the manual-outbound check is meaningless — by
+  // definition every prior outbound was "non-bot." That correctly catches
+  // a human rep handling the thread before the bot saw it, but it ALSO
+  // misfires on Spiffy's standard inbound setup where GHL workflows send
+  // the first "thanks for your interest" + opener texts. Those are
+  // expected automated preamble, not a human takeover.
+  //
+  // The fix: only run the manual-outbound check once the bot has at least
+  // one tracked turn. After that, the original semantics hold (any
+  // outbound NOT in the bot's set was sent by a rep, bot stays quiet).
+  // Same protection applies to the late manual check inside the drain
+  // loop (depth > 1 means we've already shipped at least one bot reply).
+  const isFirstBotTurn = botGhlMessageIds.size === 0;
+  if (!isFirstBotTurn) {
+    const manualDetected = await wasManualOutboundRecent(
       { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
       contactId,
-      'human-takeover',
+      botGhlMessageIds,
+      600,
     );
-    return Response.json({ skipped: 'manual_team_message_detected' });
+    if (manualDetected) {
+      await addTag(
+        { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+        contactId,
+        'human-takeover',
+      );
+      return Response.json({ skipped: 'manual_team_message_detected' });
+    }
+  } else {
+    console.log(
+      `[manual-check-skip] contact=${contactId} first bot turn (no tracked assistant messages); skipping wasManualOutboundRecent so workflow-sent openers don't misfire`,
+    );
   }
 
   // ----- Existing customer checks (tag first, then classifier) -----
@@ -268,6 +291,73 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
   let lastResponse: Response | null = null;
   const maxAttempts = 3;
 
+  // FIRST-TURN GHL HISTORY SYNC (June 16 bugfix):
+  // When the bot wakes up fresh on this contact (DO has no tracked
+  // assistant messages), pull recent GHL conversation history so the
+  // bot's reply is coherent given whatever workflow-sent openers
+  // preceded the lead's inbound. Without this, the bot would treat
+  // "March 6" as a cold lead inbound with no context of what was
+  // already said, and might re-send the opener or sound confused.
+  //
+  // We DON'T persist these into the DO as bot messages — they aren't
+  // ours. They're history-only injection for this turn. Subsequent
+  // turns will use the DO's real tracked state.
+  type HistoryMsg = { role: 'user' | 'assistant'; content: string };
+  let priorWorkflowHistory: HistoryMsg[] = [];
+  let workflowOpenerSeen = false;
+  if (isFirstBotTurn) {
+    try {
+      const recent = await getRecentMessages(
+        { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+        contactId,
+        20,
+      );
+      // newest-first → reverse to chronological, then drop the current
+      // inbound (it's already in messagesToProcess and will be appended
+      // separately below).
+      const chronological = [...recent].reverse();
+      const currentInboundBodyTrim = inboundBody.trim();
+      const seenIds = new Set<string>();
+      for (const m of chronological) {
+        if (!m.body) continue;
+        if (seenIds.has(m.id)) continue;
+        seenIds.add(m.id);
+        // Skip the message we're currently processing (most recent
+        // inbound matching the current body within the last few minutes).
+        if (
+          m.direction === 'inbound' &&
+          m.body.trim() === currentInboundBodyTrim
+        ) {
+          continue;
+        }
+        priorWorkflowHistory.push({
+          role: m.direction === 'outbound' ? 'assistant' : 'user',
+          content: m.body,
+        });
+        if (m.direction === 'outbound') workflowOpenerSeen = true;
+      }
+      console.log(
+        `[first-turn-sync] contact=${contactId} pulled ${priorWorkflowHistory.length} prior messages from GHL (openerSeen=${workflowOpenerSeen}) for context injection`,
+      );
+      // If workflow-sent outbound exists, mark openerSent so the bot
+      // doesn't try to re-send its own opener.
+      if (workflowOpenerSeen) {
+        await stub.fetch('https://do/append', {
+          method: 'POST',
+          body: JSON.stringify({ openerSent: true, newState: 'engaged' }),
+        });
+        await addTag(
+          { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+          contactId,
+          ENGAGED_TAG,
+        );
+      }
+    } catch (e) {
+      console.error('[first-turn-sync] GHL history pull failed:', e);
+      // Non-fatal: continue with empty history. Bot will respond cold.
+    }
+  }
+
   try {
     while (messagesToProcess.length > 0 && depth < MAX_DEPTH) {
       depth++;
@@ -284,10 +374,17 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         emailCaptured: currentState.emailCaptured,
         depositAmount,
       });
-      const history = currentState.messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+      // On first bot turn we have no DO state to work with, so seed
+      // history from the GHL conversation we synced earlier. On
+      // subsequent turns the DO is the source of truth.
+      const baseHistory: Array<{ role: 'user' | 'assistant'; content: string }> =
+        currentState.messages.length === 0 && priorWorkflowHistory.length > 0
+          ? [...priorWorkflowHistory]
+          : currentState.messages.map((m) => ({
+              role: m.role,
+              content: m.content,
+            }));
+      const history = baseHistory;
       // Append every messagesToProcess as a separate user turn.
       // Claude responds to the most recent substantive message.
       for (const msg of messagesToProcess) {
@@ -407,7 +504,11 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
 
       // Late manual-outbound check (only on first pass; on drain passes the
       // race window vs a teammate sending manually is near-zero seconds).
-      if (isFirstPass) {
+      // Same first-turn exemption as the upfront check: if the bot has
+      // never engaged this contact, the manual check has nothing meaningful
+      // to compare against — every prior outbound is automated workflow
+      // preamble by definition, not a human rep interrupting the bot.
+      if (isFirstPass && !isFirstBotTurn) {
         await new Promise((r) => setTimeout(r, 3000));
         const manualDetectedLate = await wasManualOutboundRecent(
           { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
