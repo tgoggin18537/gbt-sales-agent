@@ -1,6 +1,15 @@
 # Spiffy bot — tag cadence (what the bot does on its own vs manual)
 
-Last updated 2026-06-12. Source of truth: `worker/src/routes/webhook.ts`.
+Last updated 2026-06-16. Source of truth: `worker/src/routes/webhook.ts`.
+
+> **June 16 update:** Replaced the binary `wasManualOutboundRecent` check
+> with a 5-state classifier (`classifyConversationContext` in `ghl.ts`).
+> Fixed the bug where new-contact inbound replies got tagged
+> `human-takeover` because the bot couldn't tell GHL workflow openers
+> apart from rep takeovers. Same kill-switch semantics
+> (`human-takeover` = bot off). Workflow drips after the bot has been
+> dormant >6h are now correctly classified as automation and the bot
+> picks up with context. New diagnostic tag: `workflow-race-detected`.
 
 ## The one thing that matters: how to turn the bot OFF and ON
 
@@ -25,6 +34,7 @@ That's the one clean enable/disable. `needs-human` is NOT a kill switch (see bel
 | `needs-human` | Same moments as above (existing customer, or bot stuck) — always paired with `human-takeover` | **Alert flag only.** "A human should jump in here." It does NOT stop the bot by itself; the paired `human-takeover` is what stops it. |
 | `send-breakdown-email` | The moment the lead first drops their email | Fires your GHL email workflow. **Active, not a test tag.** |
 | `hype-up` | The moment the bot sends the school gas-up text (new, live after the 6/12 deploy) | Fires once per contact. This is the one you asked for. |
+| `workflow-race-detected` | The bot's classifier saw an outbound message land within 30 minutes of its own last send (suspicious — could be a rep, could be a workflow). Bot bails AND also adds this tag. | Diagnostic only. Lets us grep prod logs to distinguish real takeovers from race detections so we can tune the classifier over the next 1-2 weeks. Always paired with `human-takeover` for now. |
 
 ### human-takeover vs needs-human (your question)
 - `human-takeover` = the bot is shut off. Remove it to turn the bot back on.
