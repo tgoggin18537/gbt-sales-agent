@@ -19,12 +19,12 @@ import { callClaude } from '../integrations/anthropic';
 import {
   addTag,
   addContactNote,
+  classifyConversationContext,
   getContact,
   getDepositAmount,
-  getRecentMessages,
   sendSms,
-  wasManualOutboundRecent,
 } from '../integrations/ghl';
+import type { ClassifierResult } from '../integrations/ghl';
 import { SPIFFY_SYSTEM_PROMPT, buildTurnContext } from '../prompts/spiffy';
 import { renderFaqForPrompt } from '../prompts/faq';
 import { applyGuardrail } from '../agents/guardrail';
@@ -142,51 +142,11 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
   });
   let state = (await initRes.json()) as MiaState;
 
-  // ----- Recent manual SMS guard -----
-  // We know which outbound messageIds Spiffy himself sent (persisted in the DO).
-  // If any outbound in the window has an id NOT in that set, a human teammate
-  // sent it from the inbox and Spiffy should stay quiet.
-  const botGhlMessageIds = new Set<string>(
-    state.messages
-      .filter((m) => m.role === 'assistant' && !!m.ghlMessageId)
-      .map((m) => m.ghlMessageId as string),
-  );
-
-  // FIRST-TURN EXEMPTION (June 16 bugfix):
-  // When the bot has never engaged this contact (zero tracked assistant
-  // messages in the DO), the manual-outbound check is meaningless — by
-  // definition every prior outbound was "non-bot." That correctly catches
-  // a human rep handling the thread before the bot saw it, but it ALSO
-  // misfires on Spiffy's standard inbound setup where GHL workflows send
-  // the first "thanks for your interest" + opener texts. Those are
-  // expected automated preamble, not a human takeover.
-  //
-  // The fix: only run the manual-outbound check once the bot has at least
-  // one tracked turn. After that, the original semantics hold (any
-  // outbound NOT in the bot's set was sent by a rep, bot stays quiet).
-  // Same protection applies to the late manual check inside the drain
-  // loop (depth > 1 means we've already shipped at least one bot reply).
-  const isFirstBotTurn = botGhlMessageIds.size === 0;
-  if (!isFirstBotTurn) {
-    const manualDetected = await wasManualOutboundRecent(
-      { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-      contactId,
-      botGhlMessageIds,
-      600,
-    );
-    if (manualDetected) {
-      await addTag(
-        { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-        contactId,
-        'human-takeover',
-      );
-      return Response.json({ skipped: 'manual_team_message_detected' });
-    }
-  } else {
-    console.log(
-      `[manual-check-skip] contact=${contactId} first bot turn (no tracked assistant messages); skipping wasManualOutboundRecent so workflow-sent openers don't misfire`,
-    );
-  }
+  // NOTE: The conversation-context classifier moved AFTER /claim (see drain
+  // loop entry below) per code review P0-3: running it before /claim let
+  // concurrent webhooks both classify and both fire side effects (race on
+  // openerSent + ENGAGED_TAG). Now only the lock holder classifies;
+  // queued webhooks defer entirely.
 
   // ----- Existing customer checks (tag first, then classifier) -----
   const tagBasedExisting = hasExistingCustomerTag(tags);
@@ -222,6 +182,52 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
   if (inboundBody === '__INITIAL_TOUCH__') {
     if (state.openerSent) {
       return Response.json({ skipped: 'opener_already_sent' });
+    }
+    // P1-1 fix: before sending OUR opener, check if a workflow already
+    // sent something opener-shaped (the contact-add "thanks for your
+    // interest" + automated-rep-opener pair Spiffy uses). If we detect
+    // a likely opener, mark openerSent=true and skip our send so we
+    // don't double-opener.
+    //
+    // Conservative detection: look for our brand keywords ("Spiffy" +
+    // "SpringBreak U" / "Go Blue Tours") in any outbound from the
+    // last 30 min. If found → workflow already opened. Otherwise →
+    // proceed with our opener.
+    try {
+      const { result: preInitClass, diagnostic } = await classifyConversationContext(
+        { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+        contactId,
+        new Set(),
+        inboundMessageId,
+        1800,
+      );
+      if (preInitClass.kind === 'fresh' && preInitClass.openerLikelySent) {
+        const workflowSentOpener = preInitClass.history.some((h) => {
+          if (h.role !== 'assistant') return false;
+          const text = h.content;
+          return (
+            /\bSpiffy\b/i.test(text) &&
+            (/\bSpringBreak\s*U\b/i.test(text) || /\bGo\s*Blue\s*Tours\b/i.test(text))
+          );
+        });
+        if (workflowSentOpener) {
+          console.log(
+            `[initial-touch] contact=${contactId} workflow already sent opener-shaped message, marking openerSent=true and skipping our opener. diag=${JSON.stringify(diagnostic)}`,
+          );
+          await stub.fetch('https://do/append', {
+            method: 'POST',
+            body: JSON.stringify({ openerSent: true, newState: 'engaged' }),
+          });
+          await addTag(
+            { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+            contactId,
+            ENGAGED_TAG,
+          );
+          return Response.json({ skipped: 'workflow_opener_already_sent' });
+        }
+      }
+    } catch (e) {
+      console.error('[initial-touch] pre-send GHL check failed (proceeding with our opener):', e);
     }
     const sent = await sendSms(
       { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
@@ -291,71 +297,128 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
   let lastResponse: Response | null = null;
   const maxAttempts = 3;
 
-  // FIRST-TURN GHL HISTORY SYNC (June 16 bugfix):
-  // When the bot wakes up fresh on this contact (DO has no tracked
-  // assistant messages), pull recent GHL conversation history so the
-  // bot's reply is coherent given whatever workflow-sent openers
-  // preceded the lead's inbound. Without this, the bot would treat
-  // "March 6" as a cold lead inbound with no context of what was
-  // already said, and might re-send the opener or sound confused.
+  // ----- Conversation context classifier (June 16 — post-claim) -----
+  // Five-state discriminated union replacing the binary wasManualOutboundRecent:
+  //   - 'fresh'             — bot never engaged. Inject GHL history as context.
+  //   - 'clean'             — no interveners or bot's tracked sends are off-window.
+  //   - 'workflow_catchup'  — bot dormant >6h + intervener → inject + engage.
+  //   - 'workflow_race'     — intervener within 30min of bot's last send → bias to bail.
+  //   - 'manual_takeover'   — real rep stepped in → tag + bail.
   //
-  // We DON'T persist these into the DO as bot messages — they aren't
-  // ours. They're history-only injection for this turn. Subsequent
-  // turns will use the DO's real tracked state.
-  type HistoryMsg = { role: 'user' | 'assistant'; content: string };
-  let priorWorkflowHistory: HistoryMsg[] = [];
-  let workflowOpenerSeen = false;
-  if (isFirstBotTurn) {
-    try {
-      const recent = await getRecentMessages(
-        { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-        contactId,
-        20,
-      );
-      // newest-first → reverse to chronological, then drop the current
-      // inbound (it's already in messagesToProcess and will be appended
-      // separately below).
-      const chronological = [...recent].reverse();
-      const currentInboundBodyTrim = inboundBody.trim();
-      const seenIds = new Set<string>();
-      for (const m of chronological) {
-        if (!m.body) continue;
-        if (seenIds.has(m.id)) continue;
-        seenIds.add(m.id);
-        // Skip the message we're currently processing (most recent
-        // inbound matching the current body within the last few minutes).
-        if (
-          m.direction === 'inbound' &&
-          m.body.trim() === currentInboundBodyTrim
-        ) {
-          continue;
-        }
-        priorWorkflowHistory.push({
-          role: m.direction === 'outbound' ? 'assistant' : 'user',
-          content: m.body,
-        });
-        if (m.direction === 'outbound') workflowOpenerSeen = true;
-      }
-      console.log(
-        `[first-turn-sync] contact=${contactId} pulled ${priorWorkflowHistory.length} prior messages from GHL (openerSeen=${workflowOpenerSeen}) for context injection`,
-      );
-      // If workflow-sent outbound exists, mark openerSent so the bot
-      // doesn't try to re-send its own opener.
-      if (workflowOpenerSeen) {
-        await stub.fetch('https://do/append', {
-          method: 'POST',
-          body: JSON.stringify({ openerSent: true, newState: 'engaged' }),
-        });
+  // Runs AFTER /claim (P0-3 fix) so queued concurrent webhooks don't
+  // double-classify and double-fire side effects. We use the local
+  // botGhlMessageIds set computed from the DO state we already loaded.
+  // After each successful send inside the drain loop, we re-derive the
+  // set from the updated currentState so the pre-send recheck doesn't
+  // see the bot's own pass-1 send as an "intervener" (P0-1 fix).
+  let botGhlMessageIds = new Set<string>(
+    state.messages
+      .filter((m) => m.role === 'assistant' && !!m.ghlMessageId)
+      .map((m) => m.ghlMessageId as string),
+  );
+  const { result: classification, diagnostic: classifierDiag } = await classifyConversationContext(
+    { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+    contactId,
+    botGhlMessageIds,
+    inboundMessageId,
+    600,
+  );
+  console.log(
+    `[classifier] contact=${contactId} kind=${classification.kind} diag=${JSON.stringify(classifierDiag)}`,
+  );
+
+  // Manual takeover or suspicious workflow race → tag + release + bail.
+  if (classification.kind === 'manual_takeover' || classification.kind === 'workflow_race') {
+    await addTag(
+      { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+      contactId,
+      'human-takeover',
+    );
+    // Add a distinguishing tag so we can grep workflow_race vs real takeover
+    // when tuning the classifier from production logs (P2 from review).
+    if (classification.kind === 'workflow_race') {
+      try {
         await addTag(
           { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
           contactId,
-          ENGAGED_TAG,
+          'workflow-race-detected',
         );
+      } catch (e) {
+        console.warn('failed to add workflow-race-detected tag (non-fatal):', e);
       }
-    } catch (e) {
-      console.error('[first-turn-sync] GHL history pull failed:', e);
-      // Non-fatal: continue with empty history. Bot will respond cold.
     }
+    // We hold the /claim lock — release before bailing so future inbounds
+    // can proceed (assuming the rep eventually removes human-takeover).
+    try {
+      await stub.fetch('https://do/release', {
+        method: 'POST',
+        body: JSON.stringify({
+          processedMessageIds: messagesToProcess.map((m) => m.messageId),
+          finalize: true,
+        }),
+      });
+    } catch (e) {
+      console.error('failed to release lock on classifier bail (non-fatal):', e);
+    }
+    return Response.json({
+      skipped: 'manual_team_message_detected',
+      classifierKind: classification.kind,
+      reason: 'reason' in classification ? classification.reason : undefined,
+    });
+  }
+
+  // P1-1 fix: for 'fresh' classification, only set openerSent if the prior
+  // outbound looks like an opener (brand keywords present). A generic
+  // workflow text like "we're closed Sunday" should NOT poison openerSent
+  // since there's no recovery — once set, the INITIAL_TOUCH path will
+  // never fire our real opener.
+  if (classification.kind === 'fresh' && classification.openerLikelySent) {
+    const workflowSentOpener = classification.history.some((h) => {
+      if (h.role !== 'assistant') return false;
+      const text = h.content;
+      return (
+        /\bSpiffy\b/i.test(text) &&
+        (/\bSpringBreak\s*U\b/i.test(text) || /\bGo\s*Blue\s*Tours\b/i.test(text))
+      );
+    });
+    if (workflowSentOpener) {
+      await stub.fetch('https://do/append', {
+        method: 'POST',
+        body: JSON.stringify({ openerSent: true, newState: 'engaged' }),
+      });
+      await addTag(
+        { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+        contactId,
+        ENGAGED_TAG,
+      );
+    } else {
+      console.log(
+        `[classifier] contact=${contactId} fresh+priorOutbound but no opener-shaped message detected; leaving openerSent=false so __INITIAL_TOUCH__ can still fire our opener`,
+      );
+    }
+  }
+
+  // Context injection from classifier. For 'fresh' and 'workflow_catchup',
+  // the classifier built a chronological history of prior GHL messages we
+  // want Claude to see for THIS turn. We don't persist these to the DO as
+  // bot messages — they aren't ours. Subsequent turns will use DO state.
+  type HistoryMsg = { role: 'user' | 'assistant'; content: string };
+  const classifierContextHistory: HistoryMsg[] =
+    classification.kind === 'fresh' || classification.kind === 'workflow_catchup'
+      ? classification.history
+      : [];
+  // If the workflow already sent a booking link, treat one slot as
+  // consumed in the turn-context link budget so the bot doesn't
+  // double-send. This is a per-turn adjustment; DO linkSendCount unchanged.
+  const linkBudgetAdjustment =
+    (classification.kind === 'fresh' || classification.kind === 'workflow_catchup') &&
+    classification.linkAlreadySent
+      ? 1
+      : 0;
+  if (classifierContextHistory.length > 0) {
+    console.log(
+      `[classifier-context] contact=${contactId} kind=${classification.kind} injected ${classifierContextHistory.length} prior GHL msgs as Claude history; linkBudgetAdjustment=${linkBudgetAdjustment}`,
+    );
   }
 
   try {
@@ -367,23 +430,52 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
       const stateRes = await stub.fetch('https://do/get');
       const currentState = (await stateRes.json()) as MiaState;
 
+      // P0-1 fix: re-derive botGhlMessageIds at the top of each pass from
+      // the now-current DO state. After pass 1's send, the new ghlMessageId
+      // landed in state.messages; without this re-derive, pass 2's
+      // pre-send recheck would see the bot's own pass-1 send as an
+      // "intervener," classify it as workflow_race, and tag human-takeover
+      // on the bot itself. This recomputes on every pass for safety.
+      botGhlMessageIds = new Set<string>(
+        currentState.messages
+          .filter((m) => m.role === 'assistant' && !!m.ghlMessageId)
+          .map((m) => m.ghlMessageId as string),
+      );
+
       const turnCtx = buildTurnContext({
-        linkSendCount: currentState.linkSendCount,
+        // If a workflow already sent a booking link, treat one slot as
+        // consumed in the turn-context budget so the bot doesn't
+        // double-send. DO's linkSendCount is unchanged — this is a
+        // per-turn adjustment surfaced via the classifier context.
+        linkSendCount: currentState.linkSendCount + linkBudgetAdjustment,
         goal: currentState.goal,
         painPoint: currentState.painPoint,
         emailCaptured: currentState.emailCaptured,
         depositAmount,
       });
-      // On first bot turn we have no DO state to work with, so seed
-      // history from the GHL conversation we synced earlier. On
-      // subsequent turns the DO is the source of truth.
+      // History seeding:
+      //   - DO has tracked turns → use DO as canonical source.
+      //   - DO is empty (fresh contact) → seed from classifier's history
+      //     (workflow openers, prior inbound).
+      //   - DO has turns AND classifier provides workflow_catchup history
+      //     (rare, only for first drain pass after dormant interveners)
+      //     → prepend the catchup history before DO state so the bot sees
+      //     the drip context that was sent while it was silent.
       const baseHistory: Array<{ role: 'user' | 'assistant'; content: string }> =
-        currentState.messages.length === 0 && priorWorkflowHistory.length > 0
-          ? [...priorWorkflowHistory]
-          : currentState.messages.map((m) => ({
-              role: m.role,
-              content: m.content,
-            }));
+        currentState.messages.length === 0 && classifierContextHistory.length > 0
+          ? [...classifierContextHistory]
+          : classification.kind === 'workflow_catchup' && classifierContextHistory.length > 0
+            ? [
+                ...currentState.messages.map((m) => ({
+                  role: m.role as 'user' | 'assistant',
+                  content: m.content,
+                })),
+                ...classifierContextHistory,
+              ]
+            : currentState.messages.map((m) => ({
+                role: m.role as 'user' | 'assistant',
+                content: m.content,
+              }));
       const history = baseHistory;
       // Append every messagesToProcess as a separate user turn.
       // Claude responds to the most recent substantive message.
@@ -502,36 +594,41 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         break;
       }
 
-      // Late manual-outbound check (only on first pass; on drain passes the
-      // race window vs a teammate sending manually is near-zero seconds).
-      // Same first-turn exemption as the upfront check: if the bot has
-      // never engaged this contact, the manual check has nothing meaningful
-      // to compare against — every prior outbound is automated workflow
-      // preamble by definition, not a human rep interrupting the bot.
-      if (isFirstPass && !isFirstBotTurn) {
-        await new Promise((r) => setTimeout(r, 3000));
-        const manualDetectedLate = await wasManualOutboundRecent(
+      // Pre-send recheck (June 16: replaces 3-sec sleep + late manual check).
+      // Run the classifier ONE MORE TIME right before sending, every pass
+      // (not just first). If a rep typed in the window between Claude returning
+      // and us sending, the classifier will catch it: their message just
+      // landed in GHL within the last 30min of bot's last (about-to-happen)
+      // send → classified as workflow_race or manual_takeover, we bail.
+      //
+      // No artificial sleep: the network round-trip to GHL IS the wait.
+      const recheck = await classifyConversationContext(
+        { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+        contactId,
+        botGhlMessageIds,
+        inboundMessageId,
+        600,
+      );
+      if (recheck.result.kind === 'manual_takeover' || recheck.result.kind === 'workflow_race') {
+        console.log(
+          `[pre-send-recheck] contact=${contactId} kind=${recheck.result.kind} bailing before send. diag=${JSON.stringify(recheck.diagnostic)}`,
+        );
+        await addTag(
           { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
           contactId,
-          botGhlMessageIds,
-          600,
+          'human-takeover',
         );
-        if (manualDetectedLate) {
-          await addTag(
-            { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-            contactId,
-            'human-takeover',
-          );
-          // Bail without persisting the user/assistant turns. Finalize lock.
-          await stub.fetch('https://do/release', {
-            method: 'POST',
-            body: JSON.stringify({ processedMessageIds: processedIds, finalize: true }),
-          });
-          console.log(`[release] contact=${contactId} drained=0 depth=${depth} manualLate=true`);
-          succeeded = true;
-          lastResponse = Response.json({ skipped: 'manual_team_message_detected_late' });
-          break;
-        }
+        await stub.fetch('https://do/release', {
+          method: 'POST',
+          body: JSON.stringify({ processedMessageIds: processedIds, finalize: true }),
+        });
+        console.log(`[release] contact=${contactId} drained=0 depth=${depth} preSendRecheckBail=true`);
+        succeeded = true;
+        lastResponse = Response.json({
+          skipped: 'manual_team_message_detected_late',
+          classifierKind: recheck.result.kind,
+        });
+        break;
       }
 
       const sent = await sendSms(
