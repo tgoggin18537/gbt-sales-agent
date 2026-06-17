@@ -16,6 +16,23 @@ export type GhlEnv = {
 
 const DEFAULT_BASE = 'https://services.leadconnectorhq.com';
 
+// Defensive timeout for every GHL HTTP call. Cloudflare Workers don't
+// auto-time-out `fetch`, and a hung GHL response (we observed this in
+// the June 16 prod incident where the classifier deploy appeared to
+// stall on brand-new contacts) blocks the entire webhook request until
+// the Worker request deadline. Hard-cap every GHL call at 8 seconds so
+// the bot fails fast and gracefully instead.
+const GHL_FETCH_TIMEOUT_MS = 8000;
+
+function ghlFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return fetch(input, {
+    ...init,
+    signal:
+      (init as { signal?: AbortSignal } | undefined)?.signal ??
+      AbortSignal.timeout(GHL_FETCH_TIMEOUT_MS),
+  });
+}
+
 function headers(env: GhlEnv) {
   return {
     Authorization: `Bearer ${env.apiKey}`,
@@ -29,7 +46,7 @@ export async function sendSms(
   env: GhlEnv,
   params: { contactId: string; message: string },
 ): Promise<{ messageId: string }> {
-  const res = await fetch(`${env.baseUrl ?? DEFAULT_BASE}/conversations/messages`, {
+  const res = await ghlFetch(`${env.baseUrl ?? DEFAULT_BASE}/conversations/messages`, {
     method: 'POST',
     headers: headers(env),
     body: JSON.stringify({
@@ -44,7 +61,7 @@ export async function sendSms(
 }
 
 export async function getContact(env: GhlEnv, contactId: string): Promise<any> {
-  const res = await fetch(`${env.baseUrl ?? DEFAULT_BASE}/contacts/${contactId}`, {
+  const res = await ghlFetch(`${env.baseUrl ?? DEFAULT_BASE}/contacts/${contactId}`, {
     headers: headers(env),
   });
   if (!res.ok) throw new Error(`GHL getContact ${res.status}: ${await res.text()}`);
@@ -53,7 +70,7 @@ export async function getContact(env: GhlEnv, contactId: string): Promise<any> {
 }
 
 export async function addTag(env: GhlEnv, contactId: string, tag: string): Promise<void> {
-  const res = await fetch(`${env.baseUrl ?? DEFAULT_BASE}/contacts/${contactId}/tags`, {
+  const res = await ghlFetch(`${env.baseUrl ?? DEFAULT_BASE}/contacts/${contactId}/tags`, {
     method: 'POST',
     headers: headers(env),
     body: JSON.stringify({ tags: [tag] }),
@@ -62,7 +79,7 @@ export async function addTag(env: GhlEnv, contactId: string, tag: string): Promi
 }
 
 export async function removeTag(env: GhlEnv, contactId: string, tag: string): Promise<void> {
-  const res = await fetch(`${env.baseUrl ?? DEFAULT_BASE}/contacts/${contactId}/tags`, {
+  const res = await ghlFetch(`${env.baseUrl ?? DEFAULT_BASE}/contacts/${contactId}/tags`, {
     method: 'DELETE',
     headers: headers(env),
     body: JSON.stringify({ tags: [tag] }),
@@ -70,36 +87,48 @@ export async function removeTag(env: GhlEnv, contactId: string, tag: string): Pr
   if (!res.ok) throw new Error(`GHL removeTag ${res.status}: ${await res.text()}`);
 }
 
-/** Recent messages on the contact's conversation, newest first. */
+/** Recent messages on the contact's conversation, newest first.
+ *  Returns [] on ANY failure (HTTP error, abort/timeout, network blip,
+ *  JSON parse error). Caller treats empty-vs-error as identical, so the
+ *  bot degrades gracefully when GHL is flaky rather than throwing up.
+ */
 export async function getRecentMessages(
   env: GhlEnv,
   contactId: string,
   limit = 20,
 ): Promise<Array<{ id: string; direction: 'inbound' | 'outbound'; body: string; dateAdded: string; userId?: string; source?: string }>> {
-  // Resolve conversation id
-  const convRes = await fetch(
-    `${env.baseUrl ?? DEFAULT_BASE}/conversations/search?locationId=${env.locationId}&contactId=${contactId}`,
-    { headers: headers(env) },
-  );
-  if (!convRes.ok) return [];
-  const conv = (await convRes.json()) as any;
-  const conversationId = conv.conversations?.[0]?.id;
-  if (!conversationId) return [];
+  try {
+    // Resolve conversation id
+    const convRes = await ghlFetch(
+      `${env.baseUrl ?? DEFAULT_BASE}/conversations/search?locationId=${env.locationId}&contactId=${contactId}`,
+      { headers: headers(env) },
+    );
+    if (!convRes.ok) return [];
+    const conv = (await convRes.json()) as any;
+    const conversationId = conv.conversations?.[0]?.id;
+    if (!conversationId) return [];
 
-  const msgRes = await fetch(
-    `${env.baseUrl ?? DEFAULT_BASE}/conversations/${conversationId}/messages?limit=${limit}`,
-    { headers: headers(env) },
-  );
-  if (!msgRes.ok) return [];
-  const data = (await msgRes.json()) as any;
-  return (data.messages?.messages ?? data.messages ?? []).map((m: any) => ({
-    id: m.id,
-    direction: m.direction,
-    body: m.body ?? m.message ?? '',
-    dateAdded: m.dateAdded,
-    userId: m.userId,
-    source: m.source,
-  }));
+    const msgRes = await ghlFetch(
+      `${env.baseUrl ?? DEFAULT_BASE}/conversations/${conversationId}/messages?limit=${limit}`,
+      { headers: headers(env) },
+    );
+    if (!msgRes.ok) return [];
+    const data = (await msgRes.json()) as any;
+    return (data.messages?.messages ?? data.messages ?? []).map((m: any) => ({
+      id: m.id,
+      direction: m.direction,
+      body: m.body ?? m.message ?? '',
+      dateAdded: m.dateAdded,
+      userId: m.userId,
+      source: m.source,
+    }));
+  } catch (e: any) {
+    // AbortError (timeout), network error, JSON parse error, etc.
+    console.error(
+      `[getRecentMessages] contact=${contactId} failed (${e?.name ?? 'unknown'}): ${e?.message ?? e}`,
+    );
+    return [];
+  }
 }
 
 /**
@@ -358,7 +387,7 @@ export async function classifyConversationContext(
 }
 
 export async function addContactNote(env: GhlEnv, contactId: string, body: string): Promise<void> {
-  const res = await fetch(`${env.baseUrl ?? DEFAULT_BASE}/contacts/${contactId}/notes`, {
+  const res = await ghlFetch(`${env.baseUrl ?? DEFAULT_BASE}/contacts/${contactId}/notes`, {
     method: 'POST',
     headers: headers(env),
     body: JSON.stringify({ body }),
@@ -398,7 +427,7 @@ export async function getDepositAmount(
   }
   let res: Response;
   try {
-    res = await fetch(`${env.baseUrl ?? DEFAULT_BASE}/locations/${env.locationId}/customValues`, {
+    res = await ghlFetch(`${env.baseUrl ?? DEFAULT_BASE}/locations/${env.locationId}/customValues`, {
       headers: headers(env),
     });
   } catch {
