@@ -94,8 +94,14 @@ export class ContactThread {
     }
 
     if (url.pathname === '/append' && req.method === 'POST') {
+      // `message` is OPTIONAL (June 16 fix): callers may use /append for
+      // state-only updates like setting openerSent=true after detecting
+      // a workflow-sent opener, without appending any new message.
+      // Without this guard, body.message.role threw "Cannot read
+      // properties of undefined" on every state-only append, returning
+      // 500 and putting the GHL workflow into a retry loop.
       const body = (await req.json()) as {
-        message: MiaMessage;
+        message?: MiaMessage;
         linkSent?: boolean;
         email?: string;
         usConfirmed?: boolean;
@@ -107,13 +113,14 @@ export class ContactThread {
       if (!this.data) return new Response('not initialized', { status: 409 });
       // idempotency: if the inbound ghlMessageId matches last seen, drop.
       if (
+        body.message &&
         body.message.role === 'user' &&
         body.message.ghlMessageId &&
         body.message.ghlMessageId === this.data.lastInboundGhlMessageId
       ) {
         return Response.json({ duplicate: true, state: this.data });
       }
-      this.data.messages.push(body.message);
+      if (body.message) this.data.messages.push(body.message);
       if (body.linkSent) this.data.linkSendCount += 1;
       if (body.email) this.data.emailCaptured = body.email;
       if (body.usConfirmed !== undefined) this.data.usConfirmed = body.usConfirmed;
