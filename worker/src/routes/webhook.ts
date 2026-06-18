@@ -424,8 +424,8 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
       // the now-current DO state. After pass 1's send, the new ghlMessageId
       // landed in state.messages; without this re-derive, pass 2's
       // pre-send recheck would see the bot's own pass-1 send as an
-      // "intervener," classify it as workflow_race, and tag human-takeover
-      // on the bot itself. This recomputes on every pass for safety.
+      // "intervener" and tag human-takeover on the bot itself. This
+      // recomputes on every pass for safety.
       botGhlMessageIds = new Set<string>(
         currentState.messages
           .filter((m) => m.role === 'assistant' && !!m.ghlMessageId)
