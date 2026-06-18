@@ -54,6 +54,18 @@ const OPENER =
 
 const SYSTEM_CACHED = `${SPIFFY_SYSTEM_PROMPT}\n\n${renderFaqForPrompt()}`;
 
+// Buying-signal detector for the debounce hot-lead bypass. A lead who clearly
+// wants to book ("send me the link", drops an email) shouldn't be made to wait
+// out the full debounce window — collapse to HOT_WINDOW. Cheap regex, no LLM.
+// Vocabulary mirrors classifyAgreedToBook (classifier.ts) plus pay/deposit cues.
+const HOT_LEAD_RE =
+  /\b(send (it|me|the link|that|over)|drop the link|gimme the link|book me|sign me up|lets (do it|run it|go|book)|i'?m in|we'?re? (in|ready)|lock (it|me|this) in|ready to (book|go|pay)|deposit|venmo|zelle|how do i pay|put me down|where do i pay)\b/i;
+export function isHotLead(body: string): boolean {
+  if (!body) return false;
+  if (extractEmail(body)) return true; // dropping an email = ready to move
+  return HOT_LEAD_RE.test(body);
+}
+
 /**
  * Resolve a stable, non-empty messageId from the GHL webhook payload.
  * GHL has shipped multiple payload shapes over time and at least one
@@ -101,51 +113,83 @@ async function resolveInboundMessageId(
   return { id: `synthetic-${hex}`, source: 'synthetic' };
 }
 
-export async function handleInboundSms(req: Request, env: Env): Promise<Response> {
-  const payload = (await req.json()) as any;
+export async function handleInboundSms(
+  req: Request,
+  env: Env,
+  opts?: { drainContactId?: string },
+): Promise<Response> {
+  // Two entry modes:
+  //   normal  — a real GHL inbound SMS (req has the payload).
+  //   drain   — the debounce alarm handed off here (opts.drainContactId set);
+  //             there is no single inbound, we answer the queued burst.
+  const isDrain = !!opts?.drainContactId;
+  const debounceEnabled =
+    env.DEBOUNCE_ENABLED === '1' || env.DEBOUNCE_ENABLED === 'true';
 
-  // Signed webhook check (simple shared secret header).
-  const sig = req.headers.get('x-ghl-webhook-secret');
-  if (env.GHL_WEBHOOK_SECRET && sig !== env.GHL_WEBHOOK_SECRET) {
-    return new Response('forbidden', { status: 403 });
-  }
-
-  const contactId: string = payload.contactId;
-  const inboundBody: string = (payload.body ?? '').trim();
-
-  if (!contactId || !inboundBody) {
-    return new Response('bad request', { status: 400 });
+  let payload: any = {};
+  let contactId: string;
+  let inboundBody: string;
+  if (isDrain) {
+    contactId = opts!.drainContactId!;
+    inboundBody = '__DEBOUNCE_DRAIN__';
+  } else {
+    payload = (await req.json()) as any;
+    // Signed webhook check (simple shared secret header).
+    const sig = req.headers.get('x-ghl-webhook-secret');
+    if (env.GHL_WEBHOOK_SECRET && sig !== env.GHL_WEBHOOK_SECRET) {
+      return new Response('forbidden', { status: 403 });
+    }
+    contactId = payload.contactId;
+    inboundBody = (payload.body ?? '').trim();
+    if (!contactId || !inboundBody) {
+      return new Response('bad request', { status: 400 });
+    }
   }
 
   const receivedAt = Date.now();
-  const resolved = await resolveInboundMessageId(payload, contactId, inboundBody, receivedAt);
-  const inboundMessageId: string = resolved.id;
-  console.log(`[webhook-msgid] contact=${contactId} resolvedId=${inboundMessageId} source=${resolved.source}`);
+  // Inbound message id: resolved from the payload in normal mode; derived from
+  // the claimed batch (after /claim-all) in drain mode.
+  let inboundMessageId = '';
+  if (!isDrain) {
+    const resolved = await resolveInboundMessageId(payload, contactId, inboundBody, receivedAt);
+    inboundMessageId = resolved.id;
+    console.log(`[webhook-msgid] contact=${contactId} resolvedId=${inboundMessageId} source=${resolved.source}`);
 
-  // ----- Idempotency -----
-  const idemKey = `idem:${contactId}:${inboundMessageId}`;
-  if (env.IDEMPOTENCY && (await env.IDEMPOTENCY.get(idemKey))) {
-    return Response.json({ skipped: 'duplicate_webhook' });
-  }
-  if (env.IDEMPOTENCY) {
-    await env.IDEMPOTENCY.put(idemKey, '1', { expirationTtl: 600 });
+    // ----- Idempotency (normal mode only — a drain has no single inbound) -----
+    const idemKey = `idem:${contactId}:${inboundMessageId}`;
+    if (env.IDEMPOTENCY && (await env.IDEMPOTENCY.get(idemKey))) {
+      return Response.json({ skipped: 'duplicate_webhook' });
+    }
+    if (env.IDEMPOTENCY) {
+      await env.IDEMPOTENCY.put(idemKey, '1', { expirationTtl: 600 });
+    }
   }
 
-  // ----- Shutoff tag guard -----
+  // ----- Durable Object stub -----
+  const doId = env.CONTACT_THREAD.idFromName(contactId);
+  const stub = env.CONTACT_THREAD.get(doId);
+
+  // ----- Shutoff tag guard (BOTH modes: a human may take over DURING the
+  //       debounce window, so we re-check right before draining a burst) -----
   const contact = await getContact(
     { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
     contactId,
   );
   const tags: string[] = contact.tags ?? [];
   if (SHUTOFF_TAGS.some((t) => tags.includes(t))) {
+    if (isDrain) {
+      // A human owns the conversation now — silently drop the queued burst.
+      try {
+        await stub.fetch('https://do/drop-pending', { method: 'POST' });
+      } catch (e) {
+        console.error('drop-pending on shutoff failed (non-fatal):', e);
+      }
+      return Response.json({ skipped: 'shutoff_tag_present_drain', tags });
+    }
     return Response.json({ skipped: 'shutoff_tag_present', tags });
   }
 
-  // ----- Durable Object load/init (moved up so manual-outbound check can
-  //       use the set of bot-sent messageIds as ground truth) -----
-  const doId = env.CONTACT_THREAD.idFromName(contactId);
-  const stub = env.CONTACT_THREAD.get(doId);
-
+  // ----- DO init (both modes) -----
   const initRes = await stub.fetch('https://do/init', {
     method: 'POST',
     body: JSON.stringify({
@@ -163,32 +207,35 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
   // openerSent + ENGAGED_TAG). Now only the lock holder classifies;
   // queued webhooks defer entirely.
 
-  // ----- Existing customer checks (tag first, then classifier) -----
-  const tagBasedExisting = hasExistingCustomerTag(tags);
-  const isExisting =
-    tagBasedExisting ||
-    (await classifyExistingPatient(env.ANTHROPIC_API_KEY, inboundBody));
-  if (isExisting) {
-    // Silent handoff: tag and note for human pickup, do NOT send any
-    // SMS to the prospect. Per Spiffy V2 (4/29 feedback): when we
-    // escalate to a teammate, the conversation should just continue
-    // from a human's hands without announcing the swap.
-    await addTag(
-      { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-      contactId,
-      'needs-human',
-    );
-    await addTag(
-      { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-      contactId,
-      'human-takeover',
-    );
-    await addContactNote(
-      { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-      contactId,
-      `[Spiffy] Existing-customer signal detected. Inbound: "${inboundBody}". Bot is silent; team please respond.`,
-    );
-    return Response.json({ handled: 'existing_customer_silent' });
+  // ----- Existing customer checks (normal mode only; the drain answers an
+  //       already-vetted burst and must not re-run the LLM existing check) ---
+  if (!isDrain) {
+    const tagBasedExisting = hasExistingCustomerTag(tags);
+    const isExisting =
+      tagBasedExisting ||
+      (await classifyExistingPatient(env.ANTHROPIC_API_KEY, inboundBody));
+    if (isExisting) {
+      // Silent handoff: tag and note for human pickup, do NOT send any
+      // SMS to the prospect. Per Spiffy V2 (4/29 feedback): when we
+      // escalate to a teammate, the conversation should just continue
+      // from a human's hands without announcing the swap.
+      await addTag(
+        { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+        contactId,
+        'needs-human',
+      );
+      await addTag(
+        { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+        contactId,
+        'human-takeover',
+      );
+      await addContactNote(
+        { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
+        contactId,
+        `[Spiffy] Existing-customer signal detected. Inbound: "${inboundBody}". Bot is silent; team please respond.`,
+      );
+      return Response.json({ handled: 'existing_customer_silent' });
+    }
   }
 
   // ----- Initial-touch short-circuit -----
@@ -264,27 +311,70 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
     return Response.json({ handled: 'initial_touch', sent: OPENER });
   }
 
-  // ----- Claim per-contact in-flight lock (rapid-fire batching) -----
-  // From here on we hold the lock until /release. Concurrent webhooks for
-  // the same contact will queue into pendingMessages and we'll drain them
-  // in the loop below up to MAX_DEPTH passes.
-  const claimRes = await stub.fetch('https://do/claim', {
-    method: 'POST',
-    body: JSON.stringify({
-      messageId: inboundMessageId,
-      body: inboundBody,
-      receivedAt: Date.now(),
-    }),
-  });
-  const claim = (await claimRes.json()) as
-    | { duplicate: true }
-    | { claimed: false; queued: true; pendingCount: number }
-    | { claimed: true; messagesToProcess: PendingMessage[]; staleRecovered?: boolean };
-  if ('duplicate' in claim && claim.duplicate) {
-    return Response.json({ skipped: 'duplicate_inbound_via_claim' });
+  // ----- Debounce ENQUEUE branch (normal mode, debounce on) -----
+  // Instead of replying synchronously, push the inbound onto the DO queue and
+  // (re)arm the alarm. The bot answers the whole burst once after the lead
+  // stops typing. A buying signal collapses the wait (hot). Returns 200 to GHL
+  // immediately; the reply fires later via the alarm → /internal/drain.
+  if (!isDrain && debounceEnabled) {
+    const hot = isHotLead(inboundBody);
+    const enqRes = await stub.fetch('https://do/enqueue', {
+      method: 'POST',
+      body: JSON.stringify({
+        messageId: inboundMessageId,
+        body: inboundBody,
+        receivedAt: Date.now(),
+        hot,
+      }),
+    });
+    const enq = (await enqRes.json()) as
+      | { duplicate: true }
+      | { enqueued: true; pendingCount: number; hot: boolean; fireInMs: number };
+    if ('duplicate' in enq) {
+      return Response.json({ skipped: 'duplicate_inbound_via_enqueue' });
+    }
+    return Response.json({ enqueued: true, pendingCount: enq.pendingCount, hot: enq.hot, fireInMs: enq.fireInMs });
   }
-  if ('queued' in claim && claim.queued) {
-    return Response.json({ queued: true, pendingCount: claim.pendingCount });
+
+  // ----- Claim the batch -----
+  // drain mode: /claim-all pulls the WHOLE queued burst in one shot.
+  // normal mode (debounce off): /claim takes the in-flight lock and any
+  // orphaned pending, exactly as before. Concurrent webhooks queue + defer.
+  let messagesToProcess: PendingMessage[];
+  if (isDrain) {
+    const claimRes = await stub.fetch('https://do/claim-all', { method: 'POST' });
+    const claim = (await claimRes.json()) as
+      | { claimed: false; reason: string }
+      | { claimed: true; messagesToProcess: PendingMessage[] };
+    if (!claim.claimed) {
+      return Response.json({ skipped: 'drain_noop', reason: claim.reason });
+    }
+    messagesToProcess = claim.messagesToProcess;
+    // Derive the "current inbound" from the newest message in the burst, for
+    // the classifier's current-inbound exclusion and for logging.
+    const newest = messagesToProcess[messagesToProcess.length - 1];
+    inboundMessageId = newest?.messageId ?? '';
+    inboundBody = newest?.body ?? inboundBody;
+  } else {
+    const claimRes = await stub.fetch('https://do/claim', {
+      method: 'POST',
+      body: JSON.stringify({
+        messageId: inboundMessageId,
+        body: inboundBody,
+        receivedAt: Date.now(),
+      }),
+    });
+    const claim = (await claimRes.json()) as
+      | { duplicate: true }
+      | { claimed: false; queued: true; pendingCount: number }
+      | { claimed: true; messagesToProcess: PendingMessage[]; staleRecovered?: boolean };
+    if ('duplicate' in claim && claim.duplicate) {
+      return Response.json({ skipped: 'duplicate_inbound_via_claim' });
+    }
+    if ('queued' in claim && claim.queued) {
+      return Response.json({ queued: true, pendingCount: claim.pendingCount });
+    }
+    messagesToProcess = (claim as { claimed: true; messagesToProcess: PendingMessage[] }).messagesToProcess;
   }
 
   // Current per-person deposit, read once from the GHL location custom value
@@ -300,12 +390,6 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
   } catch (e) {
     console.error('deposit custom-value fetch failed (using default):', e);
   }
-
-  // We hold the lock. Drain loop.
-  let messagesToProcess: PendingMessage[] = (claim as {
-    claimed: true;
-    messagesToProcess: PendingMessage[];
-  }).messagesToProcess;
   const MAX_DEPTH = 3;
   let depth = 0;
   let succeeded = false;
@@ -362,6 +446,7 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
           finalize: true,
         }),
       });
+      if (isDrain) await stub.fetch('https://do/finish-drain', { method: 'POST' });
     } catch (e) {
       console.error('failed to release lock on classifier bail (non-fatal):', e);
     }
@@ -715,6 +800,25 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         { contactId, message: candidate },
       );
 
+      // AT-MOST-ONCE (drain mode): record the sent ids into the processed ring
+      // IMMEDIATELY after the send, before persisting history/tags. DO alarms
+      // are at-least-once and the drain runs in a detached waitUntil, so a
+      // recovery alarm could re-drive this burst — /claim-all filters out
+      // already-ringed ids, making the re-drive a no-op. The dedup window is
+      // now just this one DO call wide (send → mark-processed); a crash inside
+      // it risks at most ONE duplicate SMS, which is the right tradeoff vs
+      // ghosting the lead. Normal synchronous mode has no re-trigger; skip.
+      if (isDrain) {
+        try {
+          await stub.fetch('https://do/mark-processed', {
+            method: 'POST',
+            body: JSON.stringify({ processedMessageIds: processedIds }),
+          });
+        } catch (e) {
+          console.error('mark-processed failed (non-fatal, /release will ring):', e);
+        }
+      }
+
       // Whether THIS send is the school gas-up and the `hype-up` tag should
       // fire. Gated on the persisted hypeSent flag so it fires at most once
       // per contact across drain passes / rapid-fire batches.
@@ -816,8 +920,10 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         }
       }
 
-      // Release: drain pending if any, finalize on depth cap.
-      const finalize = depth >= MAX_DEPTH;
+      // Release: drain pending if any, finalize on depth cap. Drain mode is
+      // always single-pass (claim-all already grabbed the whole burst; any
+      // texts that arrived DURING this drain are re-armed by /finish-drain).
+      const finalize = isDrain || depth >= MAX_DEPTH;
       const releaseRes = await stub.fetch('https://do/release', {
         method: 'POST',
         body: JSON.stringify({ processedMessageIds: processedIds, finalize }),
@@ -853,7 +959,47 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         console.error('failed to force-release lock', e);
       }
     }
+    // Drain cleanup (every drain exit): clear the draining flag and re-arm the
+    // alarm if new texts arrived while we were drainng, so they get answered.
+    if (isDrain) {
+      try {
+        await stub.fetch('https://do/finish-drain', { method: 'POST' });
+      } catch (e) {
+        console.error('finish-drain failed (non-fatal):', e);
+      }
+    }
   }
 
   return lastResponse ?? Response.json({ handled: 'no_op' });
+}
+
+/**
+ * Internal drain entry point, called by the DO alarm (NOT by GHL). Guarded by
+ * INTERNAL_DRAIN_SECRET. Acks immediately and runs the drain in ctx.waitUntil
+ * so the awaiting DO alarm is freed BEFORE the drain fetches the DO back — a DO
+ * cannot service its own fetch while its alarm() is mid-flight (deadlock).
+ */
+export async function handleInternalDrain(
+  req: Request,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  const secret = env.INTERNAL_DRAIN_SECRET;
+  if (!secret || req.headers.get('x-internal-drain-secret') !== secret) {
+    return new Response('forbidden', { status: 403 });
+  }
+  let contactId = '';
+  try {
+    const body = (await req.json()) as { contactId?: string };
+    contactId = body.contactId ?? '';
+  } catch {
+    return new Response('bad request', { status: 400 });
+  }
+  if (!contactId) return new Response('contactId required', { status: 400 });
+  ctx.waitUntil(
+    handleInboundSms(req, env, { drainContactId: contactId }).catch((e) =>
+      console.error(`[internal-drain] contact=${contactId} drain failed: ${e}`),
+    ),
+  );
+  return Response.json({ ack: true, contactId });
 }

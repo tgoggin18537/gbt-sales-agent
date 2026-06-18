@@ -6,12 +6,20 @@ compatibility_flags = ["nodejs_compat"]
 # Defaults. Override per-env below.
 [vars]
 SPIFFY_MODEL = "claude-sonnet-4-6"
+# Public URL of this worker. The debounce alarm hands the drain off to a fresh
+# worker invocation here (a DO cannot fetch itself without deadlocking).
+WORKER_SELF_URL = "https://gbt-spiffy.limitless-living-bot.workers.dev"
+# Debounce "wait step": "1" collects rapid-fire texts and answers once after
+# the lead stops typing. Unset/"0" = legacy synchronous reply (no change).
+# Left OFF here; flip on per-env or via `wrangler secret`/dashboard after smoke.
+# DEBOUNCE_ENABLED = "1"
 
 # Secrets (set with `wrangler secret put NAME`):
 #   ANTHROPIC_API_KEY
 #   GHL_API_KEY
 #   GHL_LOCATION_ID
 #   GHL_WEBHOOK_SECRET
+#   INTERNAL_DRAIN_SECRET   (guards /internal/drain; the DO alarm sends it)
 
 # Durable Object: per-contact conversation thread.
 [[durable_objects.bindings]]
