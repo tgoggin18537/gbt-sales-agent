@@ -20,7 +20,25 @@ export default {
         return Response.json({ ok: true, service: 'gbt-spiffy', ts: Date.now() });
       }
       if (req.method === 'POST' && url.pathname === '/webhook/ghl/inbound-sms') {
-        return await handleInboundSms(req, env);
+        // June 18 (P1-3): swallow any unexpected throw to a 200. GHL
+        // treats non-2xx as retry-worthy and will hammer the endpoint,
+        // which is exactly the wrong move when something is already
+        // failing (a GHL read 500, a malformed payload, a transient
+        // error). Our own DO in-flight lock + KV idempotency are the
+        // real recovery path; we never want GHL's blind retry storm on
+        // top. handleInboundSms releases its own lock in a finally
+        // before any throw reaches here, so swallowing is safe.
+        try {
+          return await handleInboundSms(req, env);
+        } catch (err: any) {
+          console.error(
+            `[webhook-fatal] contact-unknown swallowing error to 200 (stop GHL retry storm): ${err?.message ?? err}`,
+          );
+          return Response.json(
+            { handled: 'error_swallowed', error: String(err?.message ?? err) },
+            { status: 200 },
+          );
+        }
       }
       if (req.method === 'POST' && url.pathname === '/debug/simulate') {
         return await handleSimulate(req, env);

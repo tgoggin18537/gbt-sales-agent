@@ -57,8 +57,18 @@ const SYSTEM_CACHED = `${SPIFFY_SYSTEM_PROMPT}\n\n${renderFaqForPrompt()}`;
  * GHL has shipped multiple payload shapes over time and at least one
  * client workflow sends `messageId: null`. We try the documented field
  * first, then known aliases, then fall back to a synthetic sha256 of
- * (contactId + body + minute-bucket) so dedup still works for a 60s
- * window even when GHL gives us nothing usable.
+ * (contactId + body) when GHL gives us nothing usable.
+ *
+ * June 18: dropped the minute-bucket from the seed. The bucket caused a
+ * double-fire whenever GHL retried a webhook across a clock-minute
+ * boundary (original at :59.8, retry at :00.2 → different bucket →
+ * different id → both processed → bot replied twice). Without the
+ * bucket, the same (contact, body) always hashes identically, so the
+ * KV idempotency layer (600s TTL) + the DO replay ring buffer dedup
+ * any retry of the same delivery regardless of when it lands. Cost: a
+ * lead legitimately resending the identical text within 600s is treated
+ * as a duplicate — which is the correct behavior anyway (we already
+ * replied to the first copy).
  */
 async function resolveInboundMessageId(
   payload: any,
@@ -75,9 +85,12 @@ async function resolveInboundMessageId(
   for (const [src, c] of candidates) {
     if (typeof c === 'string' && c.length > 0) return { id: c, source: src };
   }
-  // Synthetic fallback: stable for the same (contact, body, minute) triple.
-  const minute = Math.floor(receivedAt / 60_000);
-  const seed = `${contactId}:${body}:${minute}`;
+  // Synthetic fallback: stable for the same (contact, body) pair. Dedup
+  // window is bounded by the KV idempotency TTL (600s), not by a
+  // wall-clock bucket, so retries that straddle a minute boundary still
+  // collapse to one id. (receivedAt intentionally unused in the seed.)
+  void receivedAt;
+  const seed = `${contactId}:${body}`;
   const buf = new TextEncoder().encode(seed);
   const hashBuf = await crypto.subtle.digest('SHA-256', buf);
   const hex = Array.from(new Uint8Array(hashBuf))
@@ -478,18 +491,35 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
       let violations: string[] = [];
       let linkSentThisTurn = false;
       let hypeSentThisTurn = false;
+      // June 18 (P1-4): captures a hard Claude API failure (billing/credit,
+      // rate limit, network) so we route to the silent human-handoff path
+      // below instead of letting the throw propagate to a 500 → GHL retry
+      // storm. This is the exact failure that made the bot "look dead" when
+      // the Anthropic account hit $0.
+      let claudeError: string | null = null;
       const attemptLog: Array<{ draft: string; reason?: string }> = [];
       const guardHistory = [...history];
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const claudeRes = await callClaude({
-          apiKey: env.ANTHROPIC_API_KEY,
-          model: env.SPIFFY_MODEL || env.MIA_MODEL || 'claude-sonnet-4-6',
-          systemCached: SYSTEM_CACHED,
-          systemDynamic: turnCtx,
-          messages: guardHistory,
-          maxTokens: 300,
-          temperature: 0.8,
-        });
+        let claudeRes: { text: string; stopReason: string | null; usage: unknown };
+        try {
+          claudeRes = await callClaude({
+            apiKey: env.ANTHROPIC_API_KEY,
+            model: env.SPIFFY_MODEL || env.MIA_MODEL || 'claude-sonnet-4-6',
+            systemCached: SYSTEM_CACHED,
+            systemDynamic: turnCtx,
+            messages: guardHistory,
+            maxTokens: 300,
+            temperature: 0.8,
+          });
+        } catch (e: any) {
+          claudeError = e?.message ?? String(e);
+          console.error(
+            `[claude-error] contact=${contactId} attempt=${attempt + 1}/${maxAttempts}: ${claudeError}`,
+          );
+          // Don't burn the remaining retries against a failing API
+          // (a billing/credit error won't fix itself in 2 more calls).
+          break;
+        }
 
         const guard = applyGuardrail({
           candidate: claudeRes.text,
@@ -546,10 +576,13 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         const draftDump = attemptLog
           .map((a, i) => `  attempt ${i + 1}${a.reason ? ` (rejected: ${a.reason})` : ''}:\n    ${a.draft}`)
           .join('\n');
+        const fallbackReason = claudeError
+          ? `Claude API failed (${claudeError}). The bot could not generate a reply — likely an Anthropic billing/credit or rate-limit issue. CHECK THE ANTHROPIC ACCOUNT BALANCE.`
+          : `Guardrail exhausted after ${maxAttempts} attempts.`;
         await addContactNote(
           { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
           contactId,
-          `[Spiffy] Guardrail exhausted after ${maxAttempts} attempts. SILENT FALLBACK (no message sent per V5.5 1.1). Inbound: "${inboundForLog}".\nDrafts:\n${draftDump}`,
+          `[Spiffy] ${fallbackReason} SILENT FALLBACK (no message sent). Inbound: "${inboundForLog}".\nDrafts:\n${draftDump}`,
         );
         for (const msg of messagesToProcess) {
           await stub.fetch('https://do/append', {
