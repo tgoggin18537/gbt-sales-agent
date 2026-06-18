@@ -362,6 +362,23 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
     if (text !== before) violations.push('normalized_rep_name');
   }
 
+  // 2b. Count-agnostic destination acknowledgment (June 18 — Spiffy
+  //     direction). When the bot acknowledges a multi-destination list
+  //     it must NOT say "both" — leads comma-split "Punta Cana" into
+  //     "Punta, Cana" so the count is unreliable, and "both" is wrong the
+  //     moment three are named. Narrow lexical rewrite of just the
+  //     acknowledgment pattern, so legit uses ("both of you need to be
+  //     21", "both nights") are untouched.
+  {
+    const before = text;
+    text = text
+      .replace(/\bthose are both\b/gi, 'those are all')
+      .replace(/\bthey'?re both\b/gi, 'theyre all')
+      .replace(/\bboth are (a vibe|solid|great|lit|dope|fire|good options|great options)\b/gi, 'theyre all $1')
+      .replace(/\byea,?\s+both\b(?=[^.?!]*\b(vibe|solid|great|lit|dope|fire|option)\b)/gi, 'yea theyre all');
+    if (text !== before) violations.push('destination_both_to_all');
+  }
+
   // 3. Strip emoji anywhere. Spiffy uses zero.
   {
     const hadEmoji = EMOJI_REGEX.test(text);

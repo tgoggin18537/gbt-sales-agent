@@ -184,6 +184,26 @@ const CASES: Case[] = [
     },
   },
 
+  // ---- COUNT-AGNOSTIC DESTINATION ACK (June 18: ban "both" for multi-dest) ----
+  {
+    name: 'rewrites: "those are both a vibe" -> "those are all a vibe"',
+    candidate: "those are both a vibe honestly, but Occidental Punta Cana is the move",
+    isFirstMessage: false,
+    expect: { ok: true, contains: ['those are all a vibe'], notContains: ['those are both'], violationsIncludes: ['destination_both_to_all'] },
+  },
+  {
+    name: 'rewrites: "both are solid" -> "theyre all solid"',
+    candidate: "both are solid. Occidental Punta Cana is the move tho",
+    isFirstMessage: false,
+    expect: { ok: true, contains: ['theyre all solid'], notContains: ['both are solid'] },
+  },
+  {
+    name: 'keeps: legit "both of you need to be 21" untouched',
+    candidate: "heads up both of you need to be 21 to check into the Riu",
+    isFirstMessage: false,
+    expect: { ok: true, contains: ['both of you'] },
+  },
+
   // ---- EMOJI (Spiffy: zero, including opener) ----
   {
     name: 'strips: emoji in non-opener',
