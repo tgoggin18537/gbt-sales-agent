@@ -368,9 +368,9 @@ export const FAQ: FaqEntry[] = [
   {
     triggers: ['compare destinations', 'which destination is best', 'which should we pick', 'punta or cabo', 'punta cana or cabo'],
     answer:
-      "honestly Occidental Punta Cana is the move. best party vibe and thats where ill be too. Cancun is just as lit tho, Grand Oasis is the spot if Punta doesnt vibe. Cabo is a vibe but more expensive. which way yall leanin?",
+      "those are all a vibe honestly. Occidental Punta Cana is the move tho, best party scene and thats where ill be too. Cabo is dope but more on the expensive side. which way yall leanin?",
     notes:
-      'V5 Section 2.5 + June 18 fixes: lead with Punta Cana + personal presence. When the lead lists multiple destinations, use count-agnostic acknowledgment ("those are all solid"), NEVER "both" (breaks if they named three). Keep the pitch to ~2 reasons not three (less list-y). End on a real question with proper break before it (no run-on "...expensive side which one..."). Voice: "which way yall leanin?" not "which one was leaning more for yall" (that was ungrammatical).',
+      'V5 Section 2.5 + June 18 fixes: lead with Punta Cana + personal presence. ALWAYS count-agnostic when the lead lists multiple destinations ("those are all a vibe" / "all solid"), the word "both" is BANNED (leads comma-split "Punta Cana" so you cant trust the count). Keep the pitch to ~2 reasons not three (less list-y). End on a real question with a proper break before it (no run-on). Voice: "which way yall leanin?" not "which one was leaning more for yall".',
   },
   {
     triggers: ['jamaica', 'jamaica option', 'do you have jamaica', 'whats in jamaica'],
