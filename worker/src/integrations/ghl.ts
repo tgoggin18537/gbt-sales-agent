@@ -92,11 +92,25 @@ export async function removeTag(env: GhlEnv, contactId: string, tag: string): Pr
  *  JSON parse error). Caller treats empty-vs-error as identical, so the
  *  bot degrades gracefully when GHL is flaky rather than throwing up.
  */
+export type GhlMessage = {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  body: string;
+  dateAdded: string;
+  userId?: string;
+  source?: string;
+  /** GHL message type. Verified June 18 from real prod data:
+   *  TYPE_SMS (actual text), TYPE_EMAIL (workflow breakdown email),
+   *  TYPE_ACTIVITY_OPPORTUNITY (CRM activity row, NOT a text — these
+   *  were being misread as outbound texts and tripping the classifier). */
+  messageType?: string;
+};
+
 export async function getRecentMessages(
   env: GhlEnv,
   contactId: string,
   limit = 20,
-): Promise<Array<{ id: string; direction: 'inbound' | 'outbound'; body: string; dateAdded: string; userId?: string; source?: string }>> {
+): Promise<GhlMessage[]> {
   try {
     // Resolve conversation id
     const convRes = await ghlFetch(
@@ -121,6 +135,7 @@ export async function getRecentMessages(
       dateAdded: m.dateAdded,
       userId: m.userId,
       source: m.source,
+      messageType: m.messageType,
     }));
   } catch (e: any) {
     // AbortError (timeout), network error, JSON parse error, etc.
@@ -164,36 +179,51 @@ export async function wasManualOutboundRecent(
 }
 
 /**
- * Conversation context classifier (June 16 design upgrade).
+ * Conversation context classifier (rewritten June 18 with VERIFIED GHL
+ * field semantics from real prod data).
  *
- * Replaces the binary `wasManualOutboundRecent` with a five-state discriminator
- * that distinguishes fresh contacts, workflow drips, workflow races, and real
- * manual takeovers. Returns enough context for the caller to inject prior
- * messages into Claude's history, bump the booking-link send budget, and apply
- * the right tags.
+ * Replaces the binary `wasManualOutboundRecent` + the fragile time-based
+ * heuristic with a source-driven discriminator. Four states:
+ *   - fresh            : bot never engaged this contact.
+ *   - clean            : bot engaged, nothing needs special handling.
+ *   - workflow_catchup : a GHL workflow drip fired after the bot's last
+ *                        send (e.g. daily follow-up) — inject as context,
+ *                        let the bot continue.
+ *   - manual_takeover  : a real human rep sent a text after the bot's last
+ *                        send — tag human-takeover, stay silent.
  *
- * Design notes:
+ * The June 18 incident proved the prior design wrong on real data. Two
+ * classes of message were being misread as "rep interventions":
  *
- * - Time-since-bot-last-send is the PRIMARY signal. The GHL `source` and
- *   `userId` fields are logged but not (yet) trusted, because the existing
- *   integration comment notes that bot API sends look identical to manual
- *   inbox sends on `source`. Once we have a week of production logs we can
- *   harden the classifier on real field values. Until then, time is the
- *   most reliable discriminator: real reps don't sit and reply to a 6-hour-
- *   old stale thread, and they almost never type within seconds of a bot
- *   send.
+ *   1. CRM ACTIVITY ROWS. GHL returns "Opportunity created / updated" rows
+ *      with direction=outbound and messageType=TYPE_ACTIVITY_OPPORTUNITY.
+ *      These are NOT texts. One landed 6 seconds before the bot's reply and
+ *      tripped the 30-min "race" window → the bot tagged itself
+ *      human-takeover after a perfectly good first reply.
  *
- * - `workflow_race` (interveners arriving while the bot was just active)
- *   biases conservative — treats as manual_takeover until logs prove
- *   otherwise. False silence is a safer error than false reply.
+ *   2. PRE-BOT WORKFLOW OPENERS. The workflow-sent opener texts
+ *      ("What's good! It's Spiffy...") predate the bot's first reply but
+ *      sat in the recent-message window and counted as interveners on the
+ *      next turn.
  *
- * - All non-bot outbound + every inbound (except the current one) is returned
- *   as `history` for fresh and workflow_catchup, so the bot's reply is
- *   coherent with whatever already happened.
+ * Verified field semantics (real Spiffy GHL data, June 18):
+ *   - messageType: TYPE_SMS (real text) | TYPE_EMAIL (workflow breakdown)
+ *     | TYPE_ACTIVITY_* (CRM noise, not a message).
+ *   - source: 'workflow' (automation — drip/opener) | 'app' (bot send OR
+ *     human inbox send) | undefined (inbound).
  *
- * - `linkAlreadySent` flag is set true when prior context contains a
- *   springbreaku.com reservation URL — prevents the bot from double-sending
- *   the booking link after a workflow drip already shipped it.
+ * Rules (all three filters required to be a real "intervener"):
+ *   - outbound TYPE_SMS only (excludes activities + emails)
+ *   - source !== 'workflow' (workflow automation is never a takeover)
+ *   - dateAdded strictly AFTER the bot's last send (a rep takeover happens
+ *     after the bot speaks; pre-bot workflow preamble doesn't count)
+ *   - not in botGhlMessageIds (not the bot's own send)
+ *
+ * source is now a TRUSTED signal for workflow-vs-human. The old comment on
+ * wasManualOutboundRecent said source couldn't distinguish bot-vs-manual —
+ * still true (both are 'app') — but it cleanly distinguishes workflow
+ * automation from everything else, which is the distinction that matters
+ * here.
  */
 type HistoryMsg = { role: 'user' | 'assistant'; content: string };
 
@@ -201,19 +231,18 @@ export type ClassifierResult =
   | { kind: 'fresh'; history: HistoryMsg[]; linkAlreadySent: boolean; openerLikelySent: boolean }
   | { kind: 'clean' }
   | { kind: 'workflow_catchup'; history: HistoryMsg[]; linkAlreadySent: boolean }
-  | { kind: 'workflow_race'; reason: string }
   | { kind: 'manual_takeover'; reason: string };
 
 export type ClassifierDiagnostic = {
   contactId: string;
   botGhlMessageIdsCount: number;
   botLastSendAt: number | null;
-  hoursSinceBotLastSend: number | null;
   totalRecentMessages: number;
+  realSmsCount: number;
   interveners: Array<{
     id: string;
-    direction: 'inbound' | 'outbound';
     source?: string;
+    messageType?: string;
     userId?: string;
     dateAdded: string;
     ageMinutes: number;
@@ -222,15 +251,23 @@ export type ClassifierDiagnostic = {
   decision: string;
 };
 
-// Widened June 16 per code review (P1-4): catch reservation links across
-// variant URL shapes — case-insensitive package codes, any springbreaku.com
-// subdomain (incl. tracking domains like clicks.springbreaku.com), and the
-// shortlink wrapper format GHL uses. False positives are mild (one extra
-// suppressed link send); false negatives let the bot double-send the link
-// after a workflow already shipped it, which Spiffy will hate.
+// Widened June 16 (P1-4): catch reservation links across variant URL
+// shapes — any springbreaku.com / gobluetours.com path with a code.
 const RESERVATION_LINK_RE = /(?:springbreaku\.com|gobluetours\.com)\/(?:[a-z0-9-]+\/)*[a-zA-Z0-9]{4,}/i;
-const WORKFLOW_DORMANT_HOURS = 6;
-const WORKFLOW_RACE_WINDOW_MIN = 30;
+
+/** An outbound row that is an actual SMS text (not a CRM activity / email). */
+function isOutboundText(m: GhlMessage): boolean {
+  return m.direction === 'outbound' && m.messageType === 'TYPE_SMS';
+}
+/** Any row that belongs in conversational history (inbound texts + outbound
+ *  SMS texts). Excludes CRM activity rows and workflow breakdown emails. */
+function isConversational(m: GhlMessage): boolean {
+  if (m.direction === 'inbound') {
+    // Inbound is always a real lead message; only exclude explicit activities.
+    return !String(m.messageType ?? '').startsWith('TYPE_ACTIVITY');
+  }
+  return isOutboundText(m);
+}
 
 export async function classifyConversationContext(
   env: GhlEnv,
@@ -243,146 +280,120 @@ export async function classifyConversationContext(
   const now = Date.now();
   const cutoff = now - windowSeconds * 1000;
 
-  // Derive bot's last send time from the messages we recognize.
+  // Bot's last send = newest outbound TYPE_SMS whose id we recognize.
   let botLastSendAt: number | null = null;
   for (const m of recent) {
-    if (m.direction !== 'outbound') continue;
+    if (!isOutboundText(m)) continue;
     if (!botGhlMessageIds.has(m.id)) continue;
     const t = new Date(m.dateAdded).getTime();
     if (botLastSendAt === null || t > botLastSendAt) botLastSendAt = t;
   }
 
-  const hoursSinceBotLastSend =
-    botLastSendAt === null ? null : (now - botLastSendAt) / (1000 * 60 * 60);
-
-  // Chronological order (oldest first) for history construction.
+  // Chronological (oldest first) for history construction.
   const chronological = [...recent].reverse();
+  const realSmsCount = recent.filter((m) => isOutboundText(m) || m.direction === 'inbound').length;
 
-  // Build the diagnostic interveners list: non-bot outbound within window,
-  // plus inbound messages we want to log for context.
-  const interveners: ClassifierDiagnostic['interveners'] = [];
-  for (const m of recent) {
+  // Real human interveners: outbound TYPE_SMS, not workflow automation, not
+  // the bot, within window, AND strictly after the bot's last send (so the
+  // workflow opener preamble that predates the bot never counts). If
+  // botLastSendAt is null (bot engaged but sends fell off the 20-msg window),
+  // we can't time-gate — fall back to "any non-workflow non-bot SMS in window."
+  const humanInterveners = recent.filter((m) => {
+    if (!isOutboundText(m)) return false;
+    if (m.source === 'workflow') return false;
+    if (botGhlMessageIds.has(m.id)) return false;
     const t = new Date(m.dateAdded).getTime();
-    const ageMin = (now - t) / (1000 * 60);
-    if (m.direction !== 'outbound') continue;
-    if (botGhlMessageIds.has(m.id)) continue;
-    if (t < cutoff) continue;
-    interveners.push({
-      id: m.id,
-      direction: m.direction,
-      source: m.source,
-      userId: m.userId,
-      dateAdded: m.dateAdded,
-      ageMinutes: Math.round(ageMin * 10) / 10,
-      bodySnippet: (m.body || '').slice(0, 80),
-    });
-  }
+    if (t < cutoff) return false;
+    if (botLastSendAt !== null && t <= botLastSendAt) return false;
+    return true;
+  });
+
+  // Workflow drips after the bot's last send (daily follow-up automations).
+  const workflowDripsAfterBot = recent.filter((m) => {
+    if (!isOutboundText(m)) return false;
+    if (m.source !== 'workflow') return false;
+    const t = new Date(m.dateAdded).getTime();
+    if (t < cutoff) return false;
+    if (botLastSendAt !== null && t <= botLastSendAt) return false;
+    return true;
+  });
 
   const baseDiag: Omit<ClassifierDiagnostic, 'decision'> = {
     contactId,
     botGhlMessageIdsCount: botGhlMessageIds.size,
     botLastSendAt,
-    hoursSinceBotLastSend: hoursSinceBotLastSend === null ? null : Math.round(hoursSinceBotLastSend * 100) / 100,
     totalRecentMessages: recent.length,
-    interveners,
+    realSmsCount,
+    interveners: humanInterveners.map((m) => ({
+      id: m.id,
+      source: m.source,
+      messageType: m.messageType,
+      userId: m.userId,
+      dateAdded: m.dateAdded,
+      ageMinutes: Math.round(((now - new Date(m.dateAdded).getTime()) / 60000) * 10) / 10,
+      bodySnippet: (m.body || '').slice(0, 80),
+    })),
   };
 
-  const buildHistory = (excludeCurrentId: string | null): { history: HistoryMsg[]; linkAlreadySent: boolean; openerLikelySent: boolean } => {
+  const buildHistory = (excludeCurrentId: string | null) => {
     const history: HistoryMsg[] = [];
     let linkAlreadySent = false;
     let openerLikelySent = false;
     const seen = new Set<string>();
     for (const m of chronological) {
+      if (!isConversational(m)) continue; // drops activities + emails
       if (!m.body) continue;
       if (seen.has(m.id)) continue;
       seen.add(m.id);
       if (excludeCurrentId && m.id === excludeCurrentId) continue;
       if (RESERVATION_LINK_RE.test(m.body)) linkAlreadySent = true;
       if (m.direction === 'outbound') openerLikelySent = true;
-      history.push({
-        role: m.direction === 'outbound' ? 'assistant' : 'user',
-        content: m.body,
-      });
+      history.push({ role: m.direction === 'outbound' ? 'assistant' : 'user', content: m.body });
     }
     return { history, linkAlreadySent, openerLikelySent };
   };
 
-  // CASE 1: fresh contact. No bot tracked sends yet.
+  // CASE 1: fresh contact. Bot never engaged. Inject prior SMS as context.
   if (botGhlMessageIds.size === 0) {
     const { history, linkAlreadySent, openerLikelySent } = buildHistory(currentInboundGhlMessageId);
-    const decision = `fresh (DO empty); ${history.length} prior GHL messages injected as context; openerLikelySent=${openerLikelySent}; linkAlreadySent=${linkAlreadySent}`;
     return {
       result: { kind: 'fresh', history, linkAlreadySent, openerLikelySent },
-      diagnostic: { ...baseDiag, decision },
-    };
-  }
-
-  // CASE 2: clean. No interveners in the window.
-  if (interveners.length === 0) {
-    return {
-      result: { kind: 'clean' },
-      diagnostic: { ...baseDiag, decision: 'clean (no interveners in window)' },
-    };
-  }
-
-  // CASE 2b (P1-3 fix): bot has engaged (botGhlMessageIds.size > 0) but
-  // none of those IDs landed in the last 20-message GHL fetch. This means
-  // the conversation is long enough that the bot's sends fell off the
-  // recent-window scope. We can't apply the time heuristic here without
-  // botLastSendAt. Trust DO state — bot has engaged, conversation is
-  // healthy, treat the situation as clean rather than silently tagging
-  // long conversations as takeovers.
-  if (botLastSendAt === null) {
-    return {
-      result: { kind: 'clean' },
       diagnostic: {
         ...baseDiag,
-        decision: `clean (bot has ${botGhlMessageIds.size} tracked sends but none in recent 20-message scope; cannot apply time heuristic; trusting DO state)`,
+        decision: `fresh (DO empty); ${history.length} prior SMS as context; openerLikelySent=${openerLikelySent}; linkAlreadySent=${linkAlreadySent}`,
       },
     };
   }
 
-  // CASE 3 vs 4 vs 5: interveners present, bot has engaged. Classify by time.
-  //
-  // Real-rep heuristic: reps reply within minutes of seeing a lead message;
-  // they don't sit on a stale thread for 6+ hours then suddenly type. So:
-  //   - hoursSinceBotLastSend > 6 → almost certainly automated drip (catchup)
-  //   - any intervener within 30min of botLastSend → likely race (suspicious)
-  //   - between → ambiguous, conservative bias to manual_takeover
-  // Note: hoursSinceBotLastSend is guaranteed non-null here by the CASE 2b
-  // early-return above. Keeping the !== null guard for TS narrowing only.
-  if (hoursSinceBotLastSend !== null && hoursSinceBotLastSend > WORKFLOW_DORMANT_HOURS) {
+  // CASE 2: real human rep typed a text after the bot's last send. Bail.
+  if (humanInterveners.length > 0) {
+    return {
+      result: {
+        kind: 'manual_takeover',
+        reason: `manual_takeover (${humanInterveners.length} human SMS after bot last send; e.g. "${(humanInterveners[0].body || '').slice(0, 40)}")`,
+      },
+      diagnostic: { ...baseDiag, decision: `manual_takeover (${humanInterveners.length} human intervener(s))` },
+    };
+  }
+
+  // CASE 3: a workflow drip fired after the bot's last send (daily follow-up).
+  // Inject the conversation (incl. the drip) as context and let the bot
+  // continue in-flow. No time gate needed — source=workflow is definitive.
+  if (workflowDripsAfterBot.length > 0) {
     const { history, linkAlreadySent } = buildHistory(currentInboundGhlMessageId);
-    const decision = `workflow_catchup (botLastSend ${Math.round(hoursSinceBotLastSend * 10) / 10}h ago > ${WORKFLOW_DORMANT_HOURS}h threshold); ${interveners.length} intervener(s) treated as drip; linkAlreadySent=${linkAlreadySent}`;
     return {
       result: { kind: 'workflow_catchup', history, linkAlreadySent },
-      diagnostic: { ...baseDiag, decision },
+      diagnostic: {
+        ...baseDiag,
+        decision: `workflow_catchup (${workflowDripsAfterBot.length} workflow drip(s) after bot last send; injecting ${history.length} msgs)`,
+      },
     };
   }
 
-  // Check race window: any intervener within WORKFLOW_RACE_WINDOW_MIN of botLastSend?
-  const raceInteveners =
-    botLastSendAt === null
-      ? []
-      : interveners.filter((i) => {
-          const ivTs = new Date(i.dateAdded).getTime();
-          const diffMin = Math.abs(ivTs - botLastSendAt) / (1000 * 60);
-          return diffMin < WORKFLOW_RACE_WINDOW_MIN;
-        });
-  if (raceInteveners.length > 0) {
-    const decision = `workflow_race (intervener within ${WORKFLOW_RACE_WINDOW_MIN}min of bot last send); conservative bias to manual_takeover until logs prove otherwise; intervener_count=${raceInteveners.length}`;
-    return {
-      result: { kind: 'workflow_race', reason: decision },
-      diagnostic: { ...baseDiag, decision },
-    };
-  }
-
-  // Ambiguous middle case: intervener exists, bot was recent-ish but not racy.
-  // Conservative default = manual_takeover.
-  const decision = `manual_takeover (interveners present, hoursSinceBotLastSend=${hoursSinceBotLastSend ?? 'null'} in ambiguous middle band)`;
+  // CASE 4: nothing special. Bot's DO state is the source of truth.
   return {
-    result: { kind: 'manual_takeover', reason: decision },
-    diagnostic: { ...baseDiag, decision },
+    result: { kind: 'clean' },
+    diagnostic: { ...baseDiag, decision: 'clean (no human interveners or workflow drips after bot last send)' },
   };
 }
 

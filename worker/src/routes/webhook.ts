@@ -297,20 +297,23 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
   let lastResponse: Response | null = null;
   const maxAttempts = 3;
 
-  // ----- Conversation context classifier (June 16 — post-claim) -----
-  // Five-state discriminated union replacing the binary wasManualOutboundRecent:
+  // ----- Conversation context classifier (June 18 — source-driven) -----
+  // Four-state discriminated union replacing the binary wasManualOutboundRecent:
   //   - 'fresh'             — bot never engaged. Inject GHL history as context.
-  //   - 'clean'             — no interveners or bot's tracked sends are off-window.
-  //   - 'workflow_catchup'  — bot dormant >6h + intervener → inject + engage.
-  //   - 'workflow_race'     — intervener within 30min of bot's last send → bias to bail.
-  //   - 'manual_takeover'   — real rep stepped in → tag + bail.
+  //   - 'clean'             — bot engaged, nothing special.
+  //   - 'workflow_catchup'  — workflow drip after bot's last send → inject + continue.
+  //   - 'manual_takeover'   — real human rep texted after bot's last send → tag + bail.
+  //
+  // Uses VERIFIED GHL field semantics (source=workflow ⇒ automation;
+  // messageType=TYPE_SMS ⇒ real text; TYPE_ACTIVITY_* ⇒ CRM noise, ignored).
+  // See ghl.ts:classifyConversationContext for the full rule set + the
+  // June 18 incident that proved the prior time-heuristic design wrong.
   //
   // Runs AFTER /claim (P0-3 fix) so queued concurrent webhooks don't
-  // double-classify and double-fire side effects. We use the local
-  // botGhlMessageIds set computed from the DO state we already loaded.
-  // After each successful send inside the drain loop, we re-derive the
-  // set from the updated currentState so the pre-send recheck doesn't
-  // see the bot's own pass-1 send as an "intervener" (P0-1 fix).
+  // double-classify and double-fire side effects. After each successful
+  // send inside the drain loop, we re-derive botGhlMessageIds from the
+  // updated currentState so the pre-send recheck doesn't see the bot's
+  // own pass-1 send as an "intervener" (P0-1 fix).
   let botGhlMessageIds = new Set<string>(
     state.messages
       .filter((m) => m.role === 'assistant' && !!m.ghlMessageId)
@@ -327,26 +330,13 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
     `[classifier] contact=${contactId} kind=${classification.kind} diag=${JSON.stringify(classifierDiag)}`,
   );
 
-  // Manual takeover or suspicious workflow race → tag + release + bail.
-  if (classification.kind === 'manual_takeover' || classification.kind === 'workflow_race') {
+  // Real human takeover → tag + release + bail.
+  if (classification.kind === 'manual_takeover') {
     await addTag(
       { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
       contactId,
       'human-takeover',
     );
-    // Add a distinguishing tag so we can grep workflow_race vs real takeover
-    // when tuning the classifier from production logs (P2 from review).
-    if (classification.kind === 'workflow_race') {
-      try {
-        await addTag(
-          { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-          contactId,
-          'workflow-race-detected',
-        );
-      } catch (e) {
-        console.warn('failed to add workflow-race-detected tag (non-fatal):', e);
-      }
-    }
     // We hold the /claim lock — release before bailing so future inbounds
     // can proceed (assuming the rep eventually removes human-takeover).
     try {
@@ -594,14 +584,12 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         break;
       }
 
-      // Pre-send recheck (June 16: replaces 3-sec sleep + late manual check).
-      // Run the classifier ONE MORE TIME right before sending, every pass
-      // (not just first). If a rep typed in the window between Claude returning
-      // and us sending, the classifier will catch it: their message just
-      // landed in GHL within the last 30min of bot's last (about-to-happen)
-      // send → classified as workflow_race or manual_takeover, we bail.
-      //
-      // No artificial sleep: the network round-trip to GHL IS the wait.
+      // Pre-send recheck (replaces the old 3-sec sleep). Run the classifier
+      // ONE MORE TIME right before sending, every pass. If a real rep typed
+      // in the window between Claude returning and us sending, the classifier
+      // catches it (a non-workflow outbound SMS after the bot's last send) →
+      // manual_takeover, we bail. No artificial sleep: the GHL round-trip IS
+      // the wait.
       const recheck = await classifyConversationContext(
         { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
         contactId,
@@ -609,7 +597,7 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         inboundMessageId,
         600,
       );
-      if (recheck.result.kind === 'manual_takeover' || recheck.result.kind === 'workflow_race') {
+      if (recheck.result.kind === 'manual_takeover') {
         console.log(
           `[pre-send-recheck] contact=${contactId} kind=${recheck.result.kind} bailing before send. diag=${JSON.stringify(recheck.diagnostic)}`,
         );
