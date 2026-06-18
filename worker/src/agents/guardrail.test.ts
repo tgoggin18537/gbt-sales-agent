@@ -184,6 +184,26 @@ const CASES: Case[] = [
     },
   },
 
+  // ---- SELF-CORRECTION TELLS (June 18: reject so retry regenerates clean) ----
+  {
+    name: 'rejects: "Wait, you already said Punta Cana, my bad"',
+    candidate: "oh bet, 8 from UGA is solid which destination were you lookin to book? Wait, you already said Punta Cana, my bad. Let me redo that",
+    isFirstMessage: false,
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'rejects: "I need to stop re asking things you already told me"',
+    candidate: "which destination were you lookin to book? I need to stop re asking things you already told me",
+    isFirstMessage: false,
+    expect: { ok: false, reasonIncludes: 'banned phrase' },
+  },
+  {
+    name: 'keeps: normal multi-input ack (no self-correction)',
+    candidate: "okay bet, 8 from UGA goin to Punta Cana, thats solid. how soon were yall lookin to book?",
+    isFirstMessage: false,
+    expect: { ok: true, contains: ['Punta Cana'] },
+  },
+
   // ---- COUNT-AGNOSTIC DESTINATION ACK (June 18: ban "both" for multi-dest) ----
   {
     name: 'rewrites: "those are both a vibe" -> "those are all a vibe"',

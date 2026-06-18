@@ -163,6 +163,20 @@ const BANNED_PHRASES: RegExp[] = [
   // Block phrasings like "after Jan 1 it goes to $200", "before June 1 you get $100", etc.
   // Targets the specific pattern of "after/before/until [month] [day] [pricing/deposit verb]".
   /\b(?:after|before|until|by)\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*\d{0,2},?\s+(?:it\s+)?(?:goes?\s+(?:up|to)|the\s+(?:deposit|price)|deposit\s+is|pricing\s+is)\b/i,
+  // ---- SELF-CORRECTION TELLS (June 18) ----
+  // When a lead dumps multiple facts at once ("second week of march, punta
+  // cana, 8 of us"), the model sometimes asks for a field already given,
+  // catches itself mid-message, and writes a visible self-correction. That
+  // is a hard bot tell — a human never narrates "wait, you already told me
+  // that, let me redo this". Reject so the retry loop regenerates a clean
+  // reply; the lead never sees the fumble.
+  /\bwait,?\s+(?:you|y'?all|ya)\s+already\s+(?:said|told|gave|mentioned)/i,
+  /\byou\s+already\s+(?:said|told\s+me|gave\s+me|mentioned)\b[^.?!]*\bmy\s+bad\b/i,
+  /\bmy\s+bad[,.]?\s+let\s+me\s+redo\b/i,
+  /\blet\s+me\s+redo\s+that\b/i,
+  /\bI\s+need\s+to\s+stop\s+re-?\s*asking\b/i,
+  /\b(?:re-?asking|asking)\s+(?:you\s+)?(?:things|stuff)\s+you\s+already\s+(?:told|gave)/i,
+  /\bsorry,?\s+let\s+me\s+(?:start\s+over|redo|try\s+that\s+again)\b/i,
 ];
 
 // Real rep names that surface in the transcripts. Bot must never
