@@ -42,6 +42,9 @@ export type MiaState = {
   // value with undefined).
   week?: string;
   destination?: string;
+  /** Destinations the lead is weighing when they've named 2+ (sticky until
+   *  a single destination is captured). Tells the bot to push, not re-ask. */
+  destinationOptions?: string[];
   groupSize?: string;
   school?: string;
   linkSendCount: number;
@@ -120,6 +123,7 @@ export class ContactThread {
         lastInboundGhlMessageId?: string;
         week?: string;
         destination?: string;
+        destinationOptions?: string[];
         groupSize?: string;
         school?: string;
       };
@@ -149,6 +153,12 @@ export class ContactThread {
       if (body.destination && !this.data.destination) this.data.destination = body.destination;
       if (body.groupSize && !this.data.groupSize) this.data.groupSize = body.groupSize;
       if (body.school && !this.data.school) this.data.school = body.school;
+      // Options are sticky too, but a single captured destination wins —
+      // once they pick one, clear the comparison so the bot stops pushing.
+      if (body.destinationOptions && body.destinationOptions.length && !this.data.destination) {
+        this.data.destinationOptions = body.destinationOptions;
+      }
+      if (this.data.destination) this.data.destinationOptions = undefined;
       await this.save();
       return Response.json({ duplicate: false, state: this.data });
     }

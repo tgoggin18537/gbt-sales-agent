@@ -615,6 +615,7 @@ export function buildTurnContext(ctx: {
   emailCaptured?: string;
   week?: string;
   destination?: string;
+  destinationOptions?: string[];
   groupSize?: string;
   school?: string;
   lastMessagesHint?: string;
@@ -693,6 +694,12 @@ export function buildTurnContext(ctx: {
   if (captured.length > 0) {
     parts.push(
       `ALREADY CAPTURED (do NOT ask for any of these — you have them): ${captured.join(', ')}. Acknowledge what they gave and ask only for the FIRST qualifier not in this list (order: week, destination, group size, school, timeline).`,
+    );
+  }
+  // Lead is weighing multiple destinations → push, never re-ask.
+  if (!ctx.destination && ctx.destinationOptions && ctx.destinationOptions.length >= 2) {
+    parts.push(
+      `DESTINATION IS BEING DISCUSSED. The lead is weighing: ${ctx.destinationOptions.join(', ')}. They have ALREADY answered the destination question — do NOT ask "which destination were you lookin to book" (asking again will get blocked). Acknowledge count-agnostically ("those are all a vibe"), recommend Occidental Punta Cana (best college party vibe, where Spiffy will be), and ask which they're leaning toward ("which way yall leanin?"). Move the conversation forward, don't loop on the destination question.`,
     );
   }
   if (ctx.goal) parts.push(`Goal/priority hint: ${ctx.goal}`);

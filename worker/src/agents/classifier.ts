@@ -64,6 +64,11 @@ export function extractEmail(text: string): string | undefined {
 export type ExtractedQualifiers = {
   week?: string;
   destination?: string;
+  /** Set when the lead names 2+ destinations they're weighing ("punta cana
+   *  or cabo"). The bot must PUSH (recommend Occidental Punta Cana), NOT
+   *  keep asking "which destination" — re-asking trips the qualifier-repeat
+   *  guard and eventually shuts the bot off. */
+  destinationOptions?: string[];
   groupSize?: string;
   school?: string;
 };
@@ -71,7 +76,8 @@ export type ExtractedQualifiers = {
 // Closed set of destinations + their aliases → canonical name. Destination
 // is a fixed catalog, so this is 100% reliable.
 const DESTINATION_ALIASES: Array<{ canonical: string; rx: RegExp }> = [
-  { canonical: 'Punta Cana', rx: /\b(punta\s*cana|occidental(?:\s+(?:punta|caribe))?|riu\s+republica)\b/i },
+  // "punta", "punta cana", and the comma-split "punta, cana" all mean Punta Cana.
+  { canonical: 'Punta Cana', rx: /\b(punta(?:[\s,]+cana)?|occidental(?:\s+(?:punta|caribe))?|riu\s+republica)\b/i },
   { canonical: 'Cancun', rx: /\b(cancun|grand\s*oasis|krystal|riu\s+caribe|riu\s+cancun)\b/i },
   { canonical: 'Cabo', rx: /\b(cabo|riu\s+santa\s*fe|tesoro)\b/i },
   { canonical: 'Nassau', rx: /\b(nassau|bahamas|breezes)\b/i },
@@ -89,11 +95,25 @@ export function extractQualifiers(text: string): ExtractedQualifiers {
   if (!text) return out;
   const t = text.trim();
 
-  // --- Destination (closed set). Only capture if EXACTLY ONE destination
-  //     family is named. Two+ ("punta cana or cabo") = a comparison the
-  //     lead hasn't decided, so capture nothing and let the bot push. ---
-  const hitFamilies = DESTINATION_ALIASES.filter((d) => d.rx.test(t));
-  if (hitFamilies.length === 1) out.destination = hitFamilies[0].canonical;
+  // --- Destination (closed set). Handle negation ("definitely not Cancun"
+  //     must NOT capture Cancun) and the multi-option case. ---
+  const NEGATION_BEFORE = /\b(not|no|anything\s+but|except|besides|don'?t\s+want|hate|skip|avoid|other\s+than)\b[^.?!]{0,15}$/i;
+  const hitFamilies: string[] = [];
+  for (const d of DESTINATION_ALIASES) {
+    const m = d.rx.exec(t);
+    if (!m) continue;
+    // Look at the ~20 chars immediately before the match for a negation.
+    const before = t.slice(Math.max(0, m.index - 20), m.index);
+    if (NEGATION_BEFORE.test(before)) continue; // excluded, not chosen
+    hitFamilies.push(d.canonical);
+  }
+  const uniqueFamilies = [...new Set(hitFamilies)];
+  if (uniqueFamilies.length === 1) {
+    out.destination = uniqueFamilies[0];
+  } else if (uniqueFamilies.length >= 2) {
+    // A comparison — capture as options so the bot pushes instead of re-asking.
+    out.destinationOptions = uniqueFamilies;
+  }
 
   // --- Group size. Require a group-context word so we never grab a date
   //     number ("march 9th" must NOT become group size 9). ---

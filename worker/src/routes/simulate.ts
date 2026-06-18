@@ -33,6 +33,7 @@ type SimInput = {
     painPoint?: string;
     week?: string;
     destination?: string;
+    destinationOptions?: string[];
     groupSize?: string;
     school?: string;
   };
@@ -56,9 +57,13 @@ export async function handleSimulate(req: Request, env: Env): Promise<Response> 
   // reproduces prod: pull qualifiers from the inbound, merge with any
   // passed-in state (state wins, like the DO's sticky capture).
   const q = extractQualifiers(body.inbound);
+  const mergedDestination = state.destination ?? q.destination;
   const captured = {
     week: state.week ?? q.week,
-    destination: state.destination ?? q.destination,
+    destination: mergedDestination,
+    destinationOptions: mergedDestination
+      ? undefined
+      : state.destinationOptions ?? q.destinationOptions,
     groupSize: state.groupSize ?? q.groupSize,
     school: state.school ?? q.school,
   };
@@ -69,6 +74,7 @@ export async function handleSimulate(req: Request, env: Env): Promise<Response> 
     emailCaptured: state.emailCaptured,
     week: captured.week,
     destination: captured.destination,
+    destinationOptions: captured.destinationOptions,
     groupSize: captured.groupSize,
     school: captured.school,
   });

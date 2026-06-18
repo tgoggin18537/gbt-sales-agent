@@ -459,12 +459,14 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         const q = extractQualifiers(msg.body);
         if (q.week && !extracted.week) extracted.week = q.week;
         if (q.destination && !extracted.destination) extracted.destination = q.destination;
+        if (q.destinationOptions && !extracted.destinationOptions) extracted.destinationOptions = q.destinationOptions;
         if (q.groupSize && !extracted.groupSize) extracted.groupSize = q.groupSize;
         if (q.school && !extracted.school) extracted.school = q.school;
       }
       const newCaptures =
         (!currentState.week && !!extracted.week) ||
         (!currentState.destination && !!extracted.destination) ||
+        (!currentState.destination && !currentState.destinationOptions && !!extracted.destinationOptions) ||
         (!currentState.groupSize && !!extracted.groupSize) ||
         (!currentState.school && !!extracted.school);
       if (newCaptures) {
@@ -473,6 +475,7 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
           body: JSON.stringify({
             week: extracted.week,
             destination: extracted.destination,
+            destinationOptions: extracted.destinationOptions,
             groupSize: extracted.groupSize,
             school: extracted.school,
           }),
@@ -482,10 +485,15 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         );
       }
       // Merged view for THIS turn (already-captured state wins; extraction
-      // fills gaps). Used to tell the bot what it already knows.
+      // fills gaps). Used to tell the bot what it already knows. A single
+      // captured destination always wins over a pending comparison.
+      const mergedDestination = currentState.destination ?? extracted.destination;
       const captured = {
         week: currentState.week ?? extracted.week,
-        destination: currentState.destination ?? extracted.destination,
+        destination: mergedDestination,
+        destinationOptions: mergedDestination
+          ? undefined
+          : currentState.destinationOptions ?? extracted.destinationOptions,
         groupSize: currentState.groupSize ?? extracted.groupSize,
         school: currentState.school ?? extracted.school,
       };
@@ -502,6 +510,7 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         depositAmount,
         week: captured.week,
         destination: captured.destination,
+        destinationOptions: captured.destinationOptions,
         groupSize: captured.groupSize,
         school: captured.school,
       });

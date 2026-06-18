@@ -20,9 +20,21 @@ const cases: Case[] = [
   },
   // --- TWO destinations = comparison → capture NOTHING for destination ---
   {
-    name: 'two destinations "Punta, Cana or Cabo" → no destination captured',
-    input: 'Punta, Cana or Cabo. Definitely not Cancun',
+    name: 'two destinations "Punta, Cana or Cabo" → options, not single destination',
+    input: 'Punta, Cana or Cabo',
+    expect: { destinationOptions: ['Punta Cana', 'Cabo'] as any },
+    forbid: ['destination'],
+  },
+  {
+    name: 'NEGATION: "Definitely not Cancun" must NOT capture Cancun',
+    input: 'Definitely not Cancun',
     expect: {},
+    forbid: ['destination', 'destinationOptions'],
+  },
+  {
+    name: 'mixed: "Punta or Cabo, definitely not Cancun" → options [Punta,Cabo], Cancun excluded',
+    input: 'Punta, Cana or Cabo. Definitely not Cancun',
+    expect: { destinationOptions: ['Punta Cana', 'Cabo'] as any },
     forbid: ['destination'],
   },
   {
