@@ -31,6 +31,8 @@ import { applyGuardrail } from '../agents/guardrail';
 import {
   classifyExistingPatient,
   extractEmail,
+  extractQualifiers,
+  type ExtractedQualifiers,
 } from '../agents/classifier';
 import { hasExistingCustomerTag } from '../prompts/kb';
 import type { MiaState, MiaMessage, PendingMessage } from '../memory/ContactThread';
@@ -445,6 +447,49 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
           .map((m) => m.ghlMessageId as string),
       );
 
+      // QUALIFIER EXTRACTION (June 18 — bulletproofs multi-fact dumps).
+      // Deterministically pull week/destination/group size/school out of
+      // this turn's inbound(s), persist newly-captured ones to DO state
+      // (sticky), and feed the merged set into the turn context so the bot
+      // is told "already captured, don't ask again". This is what stops
+      // the bot re-asking for a destination the lead already gave in a
+      // multi-fact message.
+      const extracted: ExtractedQualifiers = {};
+      for (const msg of messagesToProcess) {
+        const q = extractQualifiers(msg.body);
+        if (q.week && !extracted.week) extracted.week = q.week;
+        if (q.destination && !extracted.destination) extracted.destination = q.destination;
+        if (q.groupSize && !extracted.groupSize) extracted.groupSize = q.groupSize;
+        if (q.school && !extracted.school) extracted.school = q.school;
+      }
+      const newCaptures =
+        (!currentState.week && !!extracted.week) ||
+        (!currentState.destination && !!extracted.destination) ||
+        (!currentState.groupSize && !!extracted.groupSize) ||
+        (!currentState.school && !!extracted.school);
+      if (newCaptures) {
+        await stub.fetch('https://do/append', {
+          method: 'POST',
+          body: JSON.stringify({
+            week: extracted.week,
+            destination: extracted.destination,
+            groupSize: extracted.groupSize,
+            school: extracted.school,
+          }),
+        });
+        console.log(
+          `[qualifiers] contact=${contactId} captured=${JSON.stringify(extracted)}`,
+        );
+      }
+      // Merged view for THIS turn (already-captured state wins; extraction
+      // fills gaps). Used to tell the bot what it already knows.
+      const captured = {
+        week: currentState.week ?? extracted.week,
+        destination: currentState.destination ?? extracted.destination,
+        groupSize: currentState.groupSize ?? extracted.groupSize,
+        school: currentState.school ?? extracted.school,
+      };
+
       const turnCtx = buildTurnContext({
         // If a workflow already sent a booking link, treat one slot as
         // consumed in the turn-context budget so the bot doesn't
@@ -455,6 +500,10 @@ export async function handleInboundSms(req: Request, env: Env): Promise<Response
         painPoint: currentState.painPoint,
         emailCaptured: currentState.emailCaptured,
         depositAmount,
+        week: captured.week,
+        destination: captured.destination,
+        groupSize: captured.groupSize,
+        school: captured.school,
       });
       // History seeding:
       //   - DO has tracked turns → use DO as canonical source.

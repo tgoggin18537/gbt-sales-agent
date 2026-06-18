@@ -681,10 +681,20 @@ export function buildTurnContext(ctx: {
       'You have used your reservation-link budget. Do not send another link this turn. If they need the link again, tell them you\'ll resend it via email.',
     );
   }
-  if (ctx.week) parts.push(`Week already captured: ${ctx.week}. Do not ask again.`);
-  if (ctx.destination) parts.push(`Destination already captured: ${ctx.destination}. Do not ask again.`);
-  if (ctx.groupSize) parts.push(`Group size already captured: ${ctx.groupSize}. Do not ask again.`);
-  if (ctx.school) parts.push(`School already captured: ${ctx.school}. Do not ask again.`);
+  // CAPTURED QUALIFIERS (ground truth from extraction). These were pulled
+  // from the lead's messages deterministically. They are FACTS — treat them
+  // as already known. Do NOT ask for any of these; acknowledge and move to
+  // the first qualifier that is NOT listed here.
+  const captured: string[] = [];
+  if (ctx.week) captured.push(`week=${ctx.week}`);
+  if (ctx.destination) captured.push(`destination=${ctx.destination}`);
+  if (ctx.groupSize) captured.push(`group size=${ctx.groupSize}`);
+  if (ctx.school) captured.push(`school=${ctx.school}`);
+  if (captured.length > 0) {
+    parts.push(
+      `ALREADY CAPTURED (do NOT ask for any of these — you have them): ${captured.join(', ')}. Acknowledge what they gave and ask only for the FIRST qualifier not in this list (order: week, destination, group size, school, timeline).`,
+    );
+  }
   if (ctx.goal) parts.push(`Goal/priority hint: ${ctx.goal}`);
   if (ctx.painPoint) parts.push(`Pain point hint: ${ctx.painPoint}`);
   if (ctx.emailCaptured) parts.push(`Email already captured: ${ctx.emailCaptured}. Do not ask again.`);

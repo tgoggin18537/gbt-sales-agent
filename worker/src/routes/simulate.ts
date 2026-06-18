@@ -17,6 +17,7 @@ import { callClaude } from '../integrations/anthropic';
 import { SPIFFY_SYSTEM_PROMPT, buildTurnContext } from '../prompts/spiffy';
 import { renderFaqForPrompt } from '../prompts/faq';
 import { applyGuardrail } from '../agents/guardrail';
+import { extractQualifiers } from '../agents/classifier';
 import type { Env } from '../env';
 
 const SYSTEM_CACHED = `${SPIFFY_SYSTEM_PROMPT}\n\n${renderFaqForPrompt()}`;
@@ -51,15 +52,25 @@ export async function handleSimulate(req: Request, env: Env): Promise<Response> 
   history.push({ role: 'user' as const, content: body.inbound });
 
   const state = body.state ?? {};
+  // Mirror the webhook's qualifier extraction so simulate faithfully
+  // reproduces prod: pull qualifiers from the inbound, merge with any
+  // passed-in state (state wins, like the DO's sticky capture).
+  const q = extractQualifiers(body.inbound);
+  const captured = {
+    week: state.week ?? q.week,
+    destination: state.destination ?? q.destination,
+    groupSize: state.groupSize ?? q.groupSize,
+    school: state.school ?? q.school,
+  };
   const turnCtx = buildTurnContext({
     linkSendCount: state.linkSendCount ?? 0,
     goal: state.goal,
     painPoint: state.painPoint,
     emailCaptured: state.emailCaptured,
-    week: state.week,
-    destination: state.destination,
-    groupSize: state.groupSize,
-    school: state.school,
+    week: captured.week,
+    destination: captured.destination,
+    groupSize: captured.groupSize,
+    school: captured.school,
   });
 
   let draft = '';

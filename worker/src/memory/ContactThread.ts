@@ -35,6 +35,15 @@ export type MiaState = {
   painPoint?: string;
   emailCaptured?: string;
   usConfirmed?: boolean;
+  // Captured qualifiers (June 18). Populated by the deterministic
+  // extractQualifiers() the moment a lead states one, so the turn context
+  // can tell the bot "already captured, do not ask again" — fixes the
+  // multi-fact-dump re-ask. Sticky once set (we never overwrite a captured
+  // value with undefined).
+  week?: string;
+  destination?: string;
+  groupSize?: string;
+  school?: string;
   linkSendCount: number;
   openerSent: boolean;
   /** True once the school gas-up message + `hype-up` tag have fired, so we
@@ -109,6 +118,10 @@ export class ContactThread {
         openerSent?: boolean;
         hypeSent?: boolean;
         lastInboundGhlMessageId?: string;
+        week?: string;
+        destination?: string;
+        groupSize?: string;
+        school?: string;
       };
       if (!this.data) return new Response('not initialized', { status: 409 });
       // idempotency: if the inbound ghlMessageId matches last seen, drop.
@@ -129,6 +142,13 @@ export class ContactThread {
       if (body.hypeSent) this.data.hypeSent = true;
       if (body.lastInboundGhlMessageId)
         this.data.lastInboundGhlMessageId = body.lastInboundGhlMessageId;
+      // Captured qualifiers are sticky — only set, never clear. The first
+      // time a field is captured it stays, so the bot never re-asks even
+      // if a later message doesn't repeat it.
+      if (body.week && !this.data.week) this.data.week = body.week;
+      if (body.destination && !this.data.destination) this.data.destination = body.destination;
+      if (body.groupSize && !this.data.groupSize) this.data.groupSize = body.groupSize;
+      if (body.school && !this.data.school) this.data.school = body.school;
       await this.save();
       return Response.json({ duplicate: false, state: this.data });
     }
