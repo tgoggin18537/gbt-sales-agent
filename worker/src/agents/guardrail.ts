@@ -311,6 +311,14 @@ const EMOJI_REGEX =
 // Patterns that signal the inbound was an objection, stall, thanks, or
 // emotional moment — turns where Spiffy would just respond and STOP,
 // never tack on a qualifier question.
+// An explicit info/details request is ENGAGEMENT, not a stall — even when
+// wrapped in "not sure yet" ("not sure yet, could I get the details for all
+// of them"). Per Spiffy direction (July 2) the qualifier flow CONTINUES
+// through info requests (quals before the email pivot), so the
+// qualifier-tack-on guard must not fire on these inbounds.
+const INFO_REQUEST_INBOUND: RegExp =
+  /\b(?:send|shoot|text|get|see|have)\b[^.?!\n]*\b(?:details?|info(?:rmation)?|breakdown|options?|pricing|prices?)\b|\bwhat (?:do you|you|u|do u) got\b|\bmore info\b/i;
+
 const SOFT_TURN_INBOUND: RegExp[] = [
   /\b(?:thanks|thank you|thx|ty|appreciate it)\b/i,
   /\b(?:cool thanks|ok thanks|ok cool|sounds good|ok bet|aight|np|no prob)\b/i,
@@ -542,7 +550,8 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
   //    end with a qualifier question. Spiffy just responds and stops.
   //    This is the #1 bot tell when it fires.
   if (input.inboundText) {
-    const isSoftTurn = SOFT_TURN_INBOUND.some((rx) => rx.test(input.inboundText!));
+    const isInfoRequest = INFO_REQUEST_INBOUND.test(input.inboundText);
+    const isSoftTurn = !isInfoRequest && SOFT_TURN_INBOUND.some((rx) => rx.test(input.inboundText!));
     if (isSoftTurn) {
       const endsWithQualifier = QUALIFIER_FAMILIES.some((fam) => fam.rx.test(text));
       if (endsWithQualifier) {

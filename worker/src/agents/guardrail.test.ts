@@ -519,6 +519,30 @@ const CASES: Case[] = [
     inboundText: "ok cool",
     expect: { ok: true },
   },
+  {
+    name: 'ALLOWS: qualifier after info request wrapped in "not sure yet" (Andrew bug, July 2)',
+    candidate: "those are all a vibe honestly, but Occidental Punta Cana is the move. how many ppl you thinking so I can get the pricing right?",
+    inboundText: "Not sure yet\nCould I get the details for all of them",
+    expect: { ok: true },
+  },
+  {
+    name: 'ALLOWS: qualifier after bare info request',
+    candidate: "bet ill get the full breakdown over to you. how many people you thinking?",
+    inboundText: "send me the details",
+    expect: { ok: true },
+  },
+  {
+    name: 'ALLOWS: qualifier after "what do you got"',
+    candidate: "we run punta cana, cancun and a few more. which week is your spring break?",
+    inboundText: "what do you got",
+    expect: { ok: true },
+  },
+  {
+    name: 'bans: qualifier after bare "not sure yet" (no info request)',
+    candidate: "all good. which school yall from?",
+    inboundText: "not sure yet",
+    expect: { ok: false, reasonIncludes: 'qualifier tacked onto a soft turn' },
+  },
 
   // ---- APOSTROPHE DENSITY ----
   {
