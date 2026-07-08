@@ -1,6 +1,6 @@
 # GHL Email Send Workflow — Spiffy V5
 
-Built May 5, 2026. Blocker for V5 #1.1 (email cadence fix). The V5 bot prompt says "bet, one sec" after the lead gives their email, then this workflow fires and sends the breakdown. The bot then says "just sent that over lmk if you got it" once the workflow tag flips.
+Built May 5, 2026. The V5 bot prompt says "bet, one sec" after the lead gives their email, then this workflow fires and sends the breakdown. The bot then says "just sent that over lmk if you got it" once the workflow tag flips.
 
 ## Workflow architecture (GHL)
 
@@ -158,13 +158,12 @@ SpringBreak U / Go Blue Tours
 - Em dashes nowhere (those triple-em separators above are just visual rules, not punctuation. Use a horizontal rule `<hr>` in HTML instead, or leave the dash row as a visual separator in plain text)
 - Sign-off: "— Spiffy" with a single em dash IS the only place an em dash is allowed (sign-offs are conventional). If you want zero em dashes anywhere, use just "Spiffy" or "spiffy" no dash.
 
-**Actually for compliance with Thomas's no-em-dashes rule, replace `—————————————————` with `~~~~~~~~~~~~~~~~~` or `=================` or just blank lines. And the sign-off should be `Spiffy` no dash.**
 
 ---
 
 ## Replacement (no em dashes anywhere)
 
-Use this version if Thomas wants the no-em-dash rule applied to the email too:
+Use this version to avoid em dash characters in the email entirely:
 
 Replace every `—————————————————` line with `=================` (equals signs, 17 chars).
 
@@ -193,8 +192,8 @@ V1 ships with first_name only. V2 (later) personalizes the email per destination
 
 ## Test plan after the workflow is built
 
-1. Manually add tag `send-breakdown-email` to a test contact in GHL (use Thomas's own email as the test contact's email)
-2. Confirm the email lands in Thomas's inbox within 60 seconds
+1. Manually add tag `send-breakdown-email` to a test contact in GHL (use your own email as the test contact's email)
+2. Confirm the email lands in your inbox within 60 seconds
 3. Confirm the `breakdown-sent` tag appears on that test contact after the email sends
 4. Confirm `send-breakdown-email` was removed
 5. Then run an SMS conversation end-to-end with the bot to confirm:
@@ -207,10 +206,10 @@ V1 ships with first_name only. V2 (later) personalizes the email per destination
 
 ---
 
-## Open questions for Thomas while building
+## Open configuration questions
 
 1. **Sender email address:** what's the verified domain in GHL? `spiffy@gobluetours.com`, `spiffy@springbreaku.com`, or something else?
 2. **Travel Insured link:** what's the actual URL Spiffy uses? Affiliate link or generic landing page?
 3. **Spiffy's phone number:** what number to put in the email signature?
 4. **First name fallback:** if `contact.first_name` is empty, what's the greeting? Probably `yo,` (just no name)
-5. **Verify worker side adds `send-breakdown-email` tag:** if not yet, that's the second build today
+5. **Worker side adds the `send-breakdown-email` tag automatically** (confirmed live; see docs/tag-cadence.md)

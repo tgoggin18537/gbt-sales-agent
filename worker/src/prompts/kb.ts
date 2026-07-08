@@ -4,7 +4,7 @@
  * V5 (May 4, 2026) rebuild. Every fact in this file is grounded in:
  *   1. Sakari transcript corpus (151 booked conversations)
  *   2. SPRING BREAK AI SALES BRAIN doc
- *   3. Spiffy's V5 revision document (~/Desktop/Spring Break Bot_Feedback_ May 4.pdf)
+ *   3. Spiffy's V5 revision document (May 4 feedback PDF)
  *
  * V5 corrections from the revision doc:
  *   - Per-resort accuracy blocks (Section 3.1)

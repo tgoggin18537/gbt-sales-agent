@@ -28,9 +28,9 @@ worker/
   src/prompts/faq.ts     FAQ / objection / destination-reaction library
   src/prompts/followups.ts  Drip cadence copy
   src/evals/             Golden test suite + mock conversations + runner
-ghl-setup/               GHL-side configuration notes
-docs/                    Build/incident references
-*.md at root             Build playbook, bot overview, V2 questions (history/context)
+docs/                    Reference docs (product spec, GHL email workflow, tag guide)
+SPIFFY_BOT_OVERVIEW.md   What the bot does, in plain English
+PHASE_5_MOCK_CONVERSATIONS.md  15 sample conversations showing target behavior
 ```
 
 ## Integration surface (how it connects)

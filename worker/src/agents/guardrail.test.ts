@@ -579,7 +579,7 @@ const CASES: Case[] = [
     expect: { ok: true },
   },
 
-  // ---- APOLOGY+REPLAY BAN (LLMD V3 port) ----
+  // ---- APOLOGY+REPLAY BAN (ported from a prior build) ----
   {
     name: 'bans: sorry about that lemme try again',
     candidate: "sorry about that, lemme try again",

@@ -68,7 +68,7 @@ const BANNED_PHRASES: RegExp[] = [
   /\bjust\s+want(?:ed)?\s+to\s+(?:reach\s+out|check\s+in|follow\s+up)\b/i,
   /\bfigured\s+I'?d\s+reach\s+out\b/i,
   /\bthanks?\s+for\s+reaching\s+out\b/i,
-  // ---- APOLOGY+REPLAY BAN (LLMD V3 port) ----
+  // ---- APOLOGY+REPLAY BAN (ported from a prior build) ----
   // Tech-failure apologies Claude sometimes invents when it sees two
   // consecutive user messages with no bot reply in between.
   /\bsorry,?\s+(?:about that|something|my last|that got)/i,

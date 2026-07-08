@@ -1,6 +1,6 @@
 # Spiffy Bot - What It Does
 
-Screen-share this on the call. Non-technical overview.
+Non-technical overview of what the bot does.
 
 ---
 
@@ -152,16 +152,3 @@ If the lead goes quiet:
 
 ---
 
-## What's NOT wired yet (V2 list)
-
-These are logged in `SPIFFY_V2_QUESTIONS.md` and need Spiffy's input:
-
-- GHL Workflow setup (5 workflows per the playbook)
-- Existing-customer / shutoff tags in his GHL
-- Confirm deposit amount ($200 from transcripts vs $50 in old doc)
-- Confirm 21+ rule scope per hotel
-- Brand SMS phone number
-- Multi-bubble SMS (Spiffy splits texts; V1 sends one per turn)
-- Carrier-blocked phrases if he's seen any
-
----

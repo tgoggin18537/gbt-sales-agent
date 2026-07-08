@@ -43,7 +43,7 @@ const ENGAGED_TAG = 'ai-bot-engaged';
 // V5 email cadence (#1.1): when the bot first captures an email, we tag the
 // contact with this so a GHL workflow fires the breakdown email send. The
 // workflow then adds 'breakdown-sent' (informational) and removes this tag.
-// See ~/code/gbt-sales-agent/docs/ghl-email-workflow.md for the GHL setup.
+// See docs/ghl-email-workflow.md for the GHL setup.
 const SEND_BREAKDOWN_TAG = 'send-breakdown-email';
 
 // Spiffy's cold opener. Single-message per Phase 2 decision (multi-bubble

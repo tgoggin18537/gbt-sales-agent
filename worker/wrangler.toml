@@ -40,11 +40,11 @@ new_sqlite_classes = ["ContactThread"]
 # id = "REPLACE_ME"
 
 # D1 for analytics. Create with:
-#   wrangler d1 create llmd_mia
+#   wrangler d1 create gbt_spiffy
 # then paste the database_id here.
 # [[d1_databases]]
 # binding = "DB"
-# database_name = "llmd_mia"
+# database_name = "gbt_spiffy"
 # database_id = "REPLACE_ME"
 # migrations_dir = "src/db"
 

@@ -15,8 +15,8 @@
     "test:classifier": "tsx src/integrations/ghl.test.ts",
     "test:guardrail": "tsx src/agents/guardrail.test.ts",
     "test:unit": "tsx src/integrations/ghl.test.ts && tsx src/agents/guardrail.test.ts",
-    "db:migrate:local": "wrangler d1 migrations apply llmd_mia --local",
-    "db:migrate:remote": "wrangler d1 migrations apply llmd_mia --remote"
+    "db:migrate:local": "wrangler d1 migrations apply gbt_spiffy --local",
+    "db:migrate:remote": "wrangler d1 migrations apply gbt_spiffy --remote"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250413.0",

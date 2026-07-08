@@ -1,11 +1,8 @@
-# llmd-closebot
+# gbt-sales-agent
 
-AI sales and closing bot built with LLMs.
+Voice-matched AI SMS sales agent for Go Blue Tours / SpringBreak U. See HANDOFF.md for setup, deploy, and transfer instructions.
 
 ## Structure
 - `worker/` - Cloudflare Worker
-- `scripts/` - Utility scripts
 - `docs/` - Documentation
-- `analysis/` - Data analysis
 - `ghl-setup/` - GoHighLevel config
-- `raw/` - Raw data

@@ -1,6 +1,6 @@
 /**
  * Small, cheap classifiers run via Haiku. Used for:
- *  - Existing patient detection (do not engage, alert team)
+ *  - Existing customer detection (do not engage, alert team)
  *  - Email extraction (capture if present)
  *  - Intent signal (agreed_to_book / objection / question / stall)
  */

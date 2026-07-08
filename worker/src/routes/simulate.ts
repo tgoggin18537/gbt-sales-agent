@@ -2,12 +2,12 @@
  * /debug/simulate
  *
  * Dry-run endpoint. Takes a conversation history and the latest user
- * message, returns what Mia would reply WITHOUT sending anything through
+ * message, returns what the bot would reply WITHOUT sending anything through
  * GHL and WITHOUT persisting to the Durable Object.
  *
  * Used for:
- *  - Testing Mia before GHL workflows are wired up.
- *  - Lauren/Nicole adversarial testing via curl or a tiny web UI.
+ *  - Testing the bot before GHL workflows are wired up.
+ *  - Adversarial testing via curl or a tiny web UI.
  *  - CI eval runs against the live Worker.
  *
  * Auth: requires the same GHL_WEBHOOK_SECRET header as inbound webhooks.
