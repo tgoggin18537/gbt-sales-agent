@@ -148,15 +148,15 @@ export async function getRecentMessages(
 
 /**
  * Detect if a team member has sent a manual outbound SMS recently. If so,
- * Mia should stay silent.
+ * the bot should stay silent.
  *
- * Ground truth: every time Mia sends, we persist the returned GHL messageId
+ * Ground truth: every time the bot sends, we persist the returned GHL messageId
  * in the Durable Object. Any outbound in the window whose id is NOT in that
  * set was sent by a human from the inbox (or another workflow).
  *
  * We deliberately do not rely on the GHL `source` field because the
  * /conversations/messages API doesn't let us stamp a custom source on a send,
- * so everything Mia sends looks identical to a manual inbox send.
+ * so everything the bot sends looks identical to a manual inbox send.
  *
  * NOTE (June 16): superseded by `classifyConversationContext` below.
  * Kept temporarily for backwards-compat in case any caller hasn't been
