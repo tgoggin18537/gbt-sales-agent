@@ -35,7 +35,7 @@ PHASE_5_MOCK_CONVERSATIONS.md  15 sample conversations showing target behavior
 
 ## Integration surface (how it connects)
 
-1. **Inbound:** GHL workflow fires a webhook → `POST /webhook` on this worker. Signature-checked with `GHL_WEBHOOK_SECRET`.
+1. **Inbound:** GHL workflow fires a webhook → `POST /webhook/ghl/inbound-sms` on this worker. Signature-checked with `GHL_WEBHOOK_SECRET`.
 2. **Brain:** worker builds the prompt (spiffy.ts + kb.ts + faq.ts + thread history from the DO) → Anthropic API (`SPIFFY_MODEL`, currently `claude-sonnet-4-6`) → guardrail + classifier passes.
 3. **Outbound:** reply sent back through the GHL API (`GHL_API_KEY`, `GHL_LOCATION_ID`) as SMS from your number. Human-handoff = silent GHL tag, no message to the lead.
 4. **Debounce (optional):** `DEBOUNCE_ENABLED=1` collects rapid-fire texts and answers once when the lead stops typing. Uses a DO alarm that calls back into the worker at `WORKER_SELF_URL` guarded by `INTERNAL_DRAIN_SECRET`. Currently OFF by default.
@@ -61,7 +61,7 @@ Plain vars (in `wrangler.toml` `[vars]`): `SPIFFY_MODEL`, `WORKER_SELF_URL` (set
 3. `npx wrangler deploy` from `worker/`. **Always plain `deploy`, do NOT use `--env production` / `deploy:prod`**, the config keeps vars and the DO binding at top level, and an `--env` deploy silently drops them (known footgun, documented from experience).
 4. Note your new worker URL (`https://gbt-spiffy.<your-subdomain>.workers.dev`) and set `WORKER_SELF_URL` in `[vars]` to it, deploy once more.
 5. Set the five secrets (`wrangler secret put` each).
-6. **Repoint GHL:** in the GHL workflow that fires the webhook, change the URL to your new worker's `/webhook`, and make sure the secret matches. This is the actual cutover moment, until you repoint, the old deployment keeps serving.
+6. **Repoint GHL:** in the GHL workflow that fires the webhook, change the URL to your new worker's `/webhook/ghl/inbound-sms` (full path matters), and make sure the secret matches. This is the actual cutover moment, until you repoint, the old deployment keeps serving.
 7. Smoke test: text the GHL number from a personal phone, watch it reply. Also `POST /debug/simulate` (see `src/routes/simulate.ts`) to test conversations without sending SMS.
 8. The Durable Object conversation state does NOT migrate between accounts, existing lead threads start fresh on your deployment. Fine in practice: cut over during a quiet hour; leads mid-conversation get a fresh thread that re-reads GHL context.
 
