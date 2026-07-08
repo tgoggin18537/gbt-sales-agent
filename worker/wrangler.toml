@@ -8,7 +8,7 @@ compatibility_flags = ["nodejs_compat"]
 SPIFFY_MODEL = "claude-sonnet-4-6"
 # Public URL of this worker. The debounce alarm hands the drain off to a fresh
 # worker invocation here (a DO cannot fetch itself without deadlocking).
-WORKER_SELF_URL = "https://gbt-spiffy.limitless-living-bot.workers.dev"
+WORKER_SELF_URL = "https://gbt-spiffy.gobluetours.workers.dev"
 # Debounce "wait step": "1" collects rapid-fire texts and answers once after
 # the lead stops typing. Unset/"0" = legacy synchronous reply (no change).
 # Left OFF here; flip on per-env or via `wrangler secret`/dashboard after smoke.
