@@ -16,7 +16,8 @@
     "test:guardrail": "tsx src/agents/guardrail.test.ts",
     "test:unit": "tsx src/integrations/ghl.test.ts && tsx src/agents/guardrail.test.ts",
     "db:migrate:local": "wrangler d1 migrations apply gbt_spiffy --local",
-    "db:migrate:remote": "wrangler d1 migrations apply gbt_spiffy --remote"
+    "db:migrate:remote": "wrangler d1 migrations apply gbt_spiffy --remote",
+    "deploy:meghan": "wrangler deploy -c wrangler.meghan.toml"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250413.0",

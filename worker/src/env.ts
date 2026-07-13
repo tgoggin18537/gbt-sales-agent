@@ -5,6 +5,8 @@ export type Env = {
   GHL_WEBHOOK_SECRET?: string;
   MIA_MODEL?: string;
   SPIFFY_MODEL?: string;
+  /** Persona selector: 'spiffy' (default) or 'meghan'. Set per-worker in wrangler config. */
+  PERSONA?: string;
   CONTACT_THREAD: DurableObjectNamespace;
   IDEMPOTENCY?: KVNamespace;
   DB?: D1Database;

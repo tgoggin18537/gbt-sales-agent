@@ -638,6 +638,8 @@ export function buildTurnContext(ctx: {
   brand?: 'SpringBreak U' | 'Go Blue Tours';
   /** Override for testing. If omitted, derived from new Date() at call time. */
   nowOverride?: Date;
+  /** Persona whose voice the injected coaching lines use. Default spiffy. */
+  persona?: 'spiffy' | 'meghan';
 }): string {
   const parts: string[] = ['# TURN CONTEXT'];
 
@@ -701,9 +703,15 @@ export function buildTurnContext(ctx: {
   }
   // Lead is weighing multiple destinations → push, never re-ask.
   if (!ctx.destination && ctx.destinationOptions && ctx.destinationOptions.length >= 2) {
-    parts.push(
-      `DESTINATION IS BEING DISCUSSED. The lead is weighing: ${ctx.destinationOptions.join(', ')}. They have ALREADY answered the destination question — do NOT ask "which destination were you lookin to book" (asking again will get blocked). Acknowledge count-agnostically ("those are all a vibe"), recommend Occidental Punta Cana (best college party vibe, where Spiffy will be), and ask which they're leaning toward ("which way yall leanin?"). Move the conversation forward, don't loop on the destination question.`,
-    );
+    if (ctx.persona === 'meghan') {
+      parts.push(
+        `DESTINATION IS BEING DISCUSSED. The lead is weighing: ${ctx.destinationOptions.join(', ')}. They have ALREADY answered the destination question — do NOT re-ask it (asking again will get blocked). Acknowledge count-agnostically ("Those are all great options!"), recommend the most popular pick per DESTINATION PUSH LOGIC, and ask which one they're leaning toward. Move the conversation forward, don't loop on the destination question.`,
+      );
+    } else {
+      parts.push(
+        `DESTINATION IS BEING DISCUSSED. The lead is weighing: ${ctx.destinationOptions.join(', ')}. They have ALREADY answered the destination question — do NOT ask "which destination were you lookin to book" (asking again will get blocked). Acknowledge count-agnostically ("those are all a vibe"), recommend Occidental Punta Cana (best college party vibe, where Spiffy will be), and ask which they're leaning toward ("which way yall leanin?"). Move the conversation forward, don't loop on the destination question.`,
+      );
+    }
   }
   if (ctx.goal) parts.push(`Goal/priority hint: ${ctx.goal}`);
   if (ctx.painPoint) parts.push(`Pain point hint: ${ctx.painPoint}`);

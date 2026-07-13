@@ -1,0 +1,22 @@
+# gbt-meghan — second persona worker, same codebase.
+# Deploy with: npx wrangler deploy -c wrangler.meghan.toml
+name = "gbt-meghan"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+PERSONA = "meghan"
+SPIFFY_MODEL = "claude-sonnet-4-6"
+WORKER_SELF_URL = "https://gbt-meghan.gobluetours.workers.dev"
+
+# Secrets (set per-worker with: wrangler secret put NAME -c wrangler.meghan.toml):
+#   ANTHROPIC_API_KEY, GHL_API_KEY, GHL_LOCATION_ID, GHL_WEBHOOK_SECRET, INTERNAL_DRAIN_SECRET
+
+[[durable_objects.bindings]]
+name = "CONTACT_THREAD"
+class_name = "ContactThread"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ContactThread"]

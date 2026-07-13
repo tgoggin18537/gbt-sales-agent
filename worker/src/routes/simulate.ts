@@ -14,13 +14,12 @@
  */
 
 import { callClaude } from '../integrations/anthropic';
-import { SPIFFY_SYSTEM_PROMPT, buildTurnContext } from '../prompts/spiffy';
-import { renderFaqForPrompt } from '../prompts/faq';
+import { buildTurnContext } from '../prompts/spiffy';
+import { systemCachedFor, personaKey } from '../prompts/persona';
 import { applyGuardrail } from '../agents/guardrail';
 import { extractQualifiers } from '../agents/classifier';
 import type { Env } from '../env';
 
-const SYSTEM_CACHED = `${SPIFFY_SYSTEM_PROMPT}\n\n${renderFaqForPrompt()}`;
 
 type SimInput = {
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -68,6 +67,7 @@ export async function handleSimulate(req: Request, env: Env): Promise<Response> 
     school: state.school ?? q.school,
   };
   const turnCtx = buildTurnContext({
+    persona: personaKey(env),
     linkSendCount: state.linkSendCount ?? 0,
     goal: state.goal,
     painPoint: state.painPoint,
@@ -89,7 +89,7 @@ export async function handleSimulate(req: Request, env: Env): Promise<Response> 
     const res = await callClaude({
       apiKey: env.ANTHROPIC_API_KEY,
       model: env.SPIFFY_MODEL || env.MIA_MODEL || 'claude-sonnet-4-6',
-      systemCached: SYSTEM_CACHED,
+      systemCached: systemCachedFor(env),
       systemDynamic: turnCtx,
       messages: history,
       maxTokens: 300,

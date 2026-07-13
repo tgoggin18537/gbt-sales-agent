@@ -25,8 +25,8 @@ import {
   sendSms,
 } from '../integrations/ghl';
 import type { ClassifierResult } from '../integrations/ghl';
-import { SPIFFY_SYSTEM_PROMPT, buildTurnContext } from '../prompts/spiffy';
-import { renderFaqForPrompt } from '../prompts/faq';
+import { buildTurnContext } from '../prompts/spiffy';
+import { systemCachedFor, personaKey, openerFor } from '../prompts/persona';
 import { applyGuardrail } from '../agents/guardrail';
 import {
   classifyExistingPatient,
@@ -49,10 +49,6 @@ const SEND_BREAKDOWN_TAG = 'send-breakdown-email';
 // Spiffy's cold opener. Single-message per Phase 2 decision (multi-bubble
 // split deferred to V2 infra upgrade). Pulled verbatim style from his
 // transcripts.
-const OPENER =
-  "What's good! It's Spiffy from SpringBreak U here. Which week is your spring break? I'll send over the options and deets";
-
-const SYSTEM_CACHED = `${SPIFFY_SYSTEM_PROMPT}\n\n${renderFaqForPrompt()}`;
 
 // Buying-signal detector for the debounce hot-lead bypass. A lead who clearly
 // wants to book ("send me the link", drops an email) shouldn't be made to wait
@@ -291,14 +287,15 @@ export async function handleInboundSms(
     } catch (e) {
       console.error('[initial-touch] pre-send GHL check failed (proceeding with our opener):', e);
     }
+    const opener = openerFor(env);
     const sent = await sendSms(
       { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-      { contactId, message: OPENER },
+      { contactId, message: opener },
     );
     await stub.fetch('https://do/append', {
       method: 'POST',
       body: JSON.stringify({
-        message: { role: 'assistant', content: OPENER, at: Date.now(), ghlMessageId: sent.messageId } as MiaMessage,
+        message: { role: 'assistant', content: opener, at: Date.now(), ghlMessageId: sent.messageId } as MiaMessage,
         openerSent: true,
         newState: 'engaged',
       }),
@@ -308,7 +305,7 @@ export async function handleInboundSms(
       contactId,
       ENGAGED_TAG,
     );
-    return Response.json({ handled: 'initial_touch', sent: OPENER });
+    return Response.json({ handled: 'initial_touch', sent: opener });
   }
 
   // ----- Debounce ENQUEUE branch (normal mode, debounce on) -----
@@ -584,6 +581,7 @@ export async function handleInboundSms(
       };
 
       const turnCtx = buildTurnContext({
+        persona: personaKey(env),
         // If a workflow already sent a booking link, treat one slot as
         // consumed in the turn-context budget so the bot doesn't
         // double-send. DO's linkSendCount is unchanged — this is a
@@ -648,7 +646,7 @@ export async function handleInboundSms(
           claudeRes = await callClaude({
             apiKey: env.ANTHROPIC_API_KEY,
             model: env.SPIFFY_MODEL || env.MIA_MODEL || 'claude-sonnet-4-6',
-            systemCached: SYSTEM_CACHED,
+            systemCached: systemCachedFor(env),
             systemDynamic: turnCtx,
             messages: guardHistory,
             maxTokens: 300,
