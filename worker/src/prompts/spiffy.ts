@@ -697,8 +697,12 @@ export function buildTurnContext(ctx: {
   if (ctx.groupSize) captured.push(`group size=${ctx.groupSize}`);
   if (ctx.school) captured.push(`school=${ctx.school}`);
   if (captured.length > 0) {
+    const order =
+      ctx.persona === 'meghan'
+        ? 'week, destination, group size, then the best email to send pricing to (the 21+ question only when Cabo or a RIU property is in play)'
+        : 'week, destination, group size, school, timeline';
     parts.push(
-      `ALREADY CAPTURED (do NOT ask for any of these — you have them): ${captured.join(', ')}. Acknowledge what they gave and ask only for the FIRST qualifier not in this list (order: week, destination, group size, school, timeline).`,
+      `ALREADY CAPTURED (do NOT ask for any of these — you have them): ${captured.join(', ')}. Acknowledge what they gave and ask only for the FIRST qualifier not in this list (order: ${order}).`,
     );
   }
   // Lead is weighing multiple destinations → push, never re-ask.

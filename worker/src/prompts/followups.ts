@@ -32,3 +32,14 @@ export const FOLLOWUPS = {
   day7:
     "last one from me for now, no pressure. if spring break is still a thing for y'all just hit me back and ill see what we got. ill also hit you up if I see prices moving or things selling out for your week",
 };
+
+/**
+ * Meghan-voiced drip bodies for her GHL follow-up workflow (reference copy,
+ * same cadence as FOLLOWUPS). day7 bakes the follow-up hook before the
+ * passive release, per the v4.5 rule.
+ */
+export const MEGHAN_FOLLOWUPS = {
+  day1: "Hey! Just checking in, how is the group looking?",
+  day3: "Hi again! Options for your week are still moving, want me to take another look for you?",
+  day7: "Last one from me for now, no pressure at all! If spring break is still on the radar just text me back :) I'll reach out if I see prices moving or your week filling up",
+} as const;

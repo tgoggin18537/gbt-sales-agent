@@ -97,6 +97,7 @@ export async function handleSimulate(req: Request, env: Env): Promise<Response> 
     });
     const guard = applyGuardrail({
         extraBannedPhrases: extraBannedFor(env),
+        persona: personaKey(env),
       candidate: res.text,
       linkSendCountBefore: state.linkSendCount ?? 0,
       isFirstMessage: !(state.openerSent ?? false),

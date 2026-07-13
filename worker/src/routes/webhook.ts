@@ -228,7 +228,7 @@ export async function handleInboundSms(
       await addContactNote(
         { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
         contactId,
-        `[Spiffy] Existing-customer signal detected. Inbound: "${inboundBody}". Bot is silent; team please respond.`,
+        `[${personaKey(env) === 'meghan' ? 'Meghan' : 'Spiffy'}] Existing-customer signal detected. Inbound: "${inboundBody}". Bot is silent; team please respond.`,
       );
       return Response.json({ handled: 'existing_customer_silent' });
     }
@@ -264,7 +264,7 @@ export async function handleInboundSms(
           if (h.role !== 'assistant') return false;
           const text = h.content;
           return (
-            /\bSpiffy\b/i.test(text) &&
+            (personaKey(env) === 'meghan' ? /\bMeghan\b/i : /\bSpiffy\b/i).test(text) &&
             (/\bSpringBreak\s*U\b/i.test(text) || /\bGo\s*Blue\s*Tours\b/i.test(text))
           );
         });
@@ -464,7 +464,7 @@ export async function handleInboundSms(
       if (h.role !== 'assistant') return false;
       const text = h.content;
       return (
-        /\bSpiffy\b/i.test(text) &&
+        (personaKey(env) === 'meghan' ? /\bMeghan\b/i : /\bSpiffy\b/i).test(text) &&
         (/\bSpringBreak\s*U\b/i.test(text) || /\bGo\s*Blue\s*Tours\b/i.test(text))
       );
     });
@@ -664,6 +664,7 @@ export async function handleInboundSms(
 
         const guard = applyGuardrail({
         extraBannedPhrases: extraBannedFor(env),
+        persona: personaKey(env),
           candidate: claudeRes.text,
           linkSendCountBefore: currentState.linkSendCount,
           isFirstMessage: !currentState.openerSent,
@@ -724,7 +725,7 @@ export async function handleInboundSms(
         await addContactNote(
           { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
           contactId,
-          `[Spiffy] ${fallbackReason} SILENT FALLBACK (no message sent). Inbound: "${inboundForLog}".\nDrafts:\n${draftDump}`,
+          `[${personaKey(env) === 'meghan' ? 'Meghan' : 'Spiffy'}] ${fallbackReason} SILENT FALLBACK (no message sent). Inbound: "${inboundForLog}".\nDrafts:\n${draftDump}`,
         );
         for (const msg of messagesToProcess) {
           await stub.fetch('https://do/append', {

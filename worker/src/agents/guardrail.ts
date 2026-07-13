@@ -207,7 +207,7 @@ const NAME_VARIANTS = [
 // the package format means the LLM hallucinated one. Reject so the
 // server / Spiffy injects a real link.
 const HALLUCINATED_LINK_PATTERN =
-  /secure\.springbreaku\.com\/site\/public\/package\/[A-Z0-9]+/i;
+  /secure\.(springbreaku|gobluetours)\.com\/site\/public\/\S+/i;
 
 // "AI-tell" phrases to soft-cap at 1 per conversation. Spiffy DOES use
 // these sparingly (evidence in Phase 2 voice synthesis) but over-use
@@ -231,12 +231,18 @@ const QUESTION_STEM =
 // more than twice in a thread; 3rd ask is form-field behavior.
 const QUALIFIER_FAMILIES: { name: string; rx: RegExp }[] = [
   {
+    // Email ask (both personas): the pivot is one-time + one re-steer max,
+    // so the asked-twice cap applies. Meghan phrasings + Spiffy phrasings.
+    name: 'email',
+    rx: /\bbest email\b|\bemail\s+address\s+(?:to\s+send|for\s+you)\b|\bemail\s+to\s+send\s+(?:the\s+)?(?:pricing|everything|it)\b/i,
+  },
+  {
     name: 'week',
     rx: /\bwhich\s+week\b|\bwhat\s+week\b|\byou\s+know\s+which\s+week\b|\bwhen'?s?\s+your\s+spring\s+break\b|\bwhat'?s?\s+your\s+spring\s+break\s+week\b/i,
   },
   {
     name: 'destination',
-    rx: /\bwhich\s+destination\b|\bwhat\s+destination\b|\bwhere\s+(?:were|are)\s+(?:you|y'?all)\s+lookin(?:g)?\s+to\s+(?:book|go)\b|\bwhere\s+(?:you|y'?all)\s+(?:wanna|want to)\s+go\b/i,
+    rx: /\bwhich\s+destination\b|\bwhat\s+destination\b|\bwhere\s+(?:were|are)\s+(?:you|y'?all)\s+lookin(?:g)?\s+to\s+(?:book|go)\b|\bwhere\s+(?:you|y'?all)\s+(?:wanna|want to)\s+go\b|\bdestination\s+in\s+mind\b|\bknow\s+where\s+you\s+want\s+to\s+go\b/i,
   },
   {
     name: 'group_size',
@@ -342,6 +348,9 @@ export type GuardrailInput = {
   priorAssistantLengths?: number[];
   /** Persona-specific bans checked alongside the global lists (regenerate on hit). */
   extraBannedPhrases?: RegExp[];
+  /** Active persona. Voice-polish rewrites (apostrophe softener, name normalization,
+   *  both→all token) are Spiffy-shaped; 'meghan' gets proper-grammar variants. */
+  persona?: 'spiffy' | 'meghan';
 };
 
 export type GuardrailResult =
@@ -380,7 +389,7 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
 
   // 2. Normalize rep name variants to "Spiffy". Cheap rewrite, not a
   //    reject. Handles the case where the LLM tries "Derrick".
-  for (const rx of NAME_VARIANTS) {
+  for (const rx of input.persona === 'meghan' ? [] : NAME_VARIANTS) {
     const before = text;
     text = text.replace(rx, CANONICAL_NAME);
     if (text !== before) violations.push('normalized_rep_name');
@@ -397,8 +406,8 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
     const before = text;
     text = text
       .replace(/\bthose are both\b/gi, 'those are all')
-      .replace(/\bthey'?re both\b/gi, 'theyre all')
-      .replace(/\bboth are (a vibe|solid|great|lit|dope|fire|good options|great options)\b/gi, 'theyre all $1')
+      .replace(/\bthey'?re both\b/gi, input.persona === 'meghan' ? "they're all" : 'theyre all')
+      .replace(/\bboth are (a vibe|solid|great|lit|dope|fire|good options|great options)\b/gi, input.persona === 'meghan' ? "they're all $1" : 'theyre all $1')
       .replace(/\byea,?\s+both\b(?=[^.?!]*\b(vibe|solid|great|lit|dope|fire|option)\b)/gi, 'yea theyre all');
     if (text !== before) violations.push('destination_both_to_all');
   }
@@ -619,7 +628,9 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
   //    the time ("thats", "ill", "im", "dont"). If too many
   //    contractions have apostrophes the text reads too proper.
   //    Rewrite, don't reject — this is voice polish, not a rule break.
-  {
+  //    MEGHAN: skipped entirely — her measured voice is 99.8% correct
+  //    apostrophes (615:1); this rewrite would corrupt it.
+  if (input.persona !== 'meghan') {
     const contractionsWithApostrophe = (text.match(/\b(?:I'm|it's|that's|there's|I'll|don't|can't|won't|wouldn't|couldn't|isn't|aren't|didn't|doesn't|haven't|hasn't|we've|they've|you've|I've|we're|they're|you're|he's|she's|what's|who's|let's)\b/gi) ?? []);
     if (contractionsWithApostrophe.length >= 3) {
       // Drop apostrophes on roughly half, favoring the ones Spiffy
