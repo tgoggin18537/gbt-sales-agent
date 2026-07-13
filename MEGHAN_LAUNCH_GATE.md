@@ -17,11 +17,20 @@ the Spiffy line. Do not skip any.
   add `quote-sent` tag → remove trigger tag.
 
 ## 2. Exactly ONE owner per lead (double-reply prevention, 4/14 lesson)
-Meghan's workflows must be gated on her routing (her number / pipeline / a
-`meghan-lead` tag) and EXCLUDED from Spiffy's triggers, and vice versa. Two
-bots answering one lead is the worst-case failure. Add the 30-second dedup
-wait after the webhook step per the proven workflow spec.
-Test: one inbound → exactly one reply.
+ROUTING ANSWERED (Derrick, Jul 10 email): same GHL subaccount, each rep gets
+their OWN PHONE LINE, both reps take leads from both brands. Lead assignment
+is school-based first (owned schools), new schools ~50/50, NOT gender-based.
+So the gate is HER NUMBER: Meghan's inbound workflow triggers only on messages
+to her line and is EXCLUDED from Spiffy's triggers, and vice versa. Two bots
+answering one lead is the worst-case failure. Add the 30-second dedup wait
+after the webhook step per the proven workflow spec.
+Verify at wiring: GHL replies go out on the conversation's original number
+(her line), not the location default.
+Test: one inbound to each line → exactly one reply, from the right persona.
+
+Note: same subaccount means the GHL_API_KEY / GHL_LOCATION_ID secrets already
+set on gbt-meghan are correct as-is. Brand handling (both reps rep both
+brands) is already live via the LEAD BRAND turn-context injection.
 
 ## 3. Integration launch gates (June 16-18 lesson: bugs live in the GHL+DO layer)
 - [ ] Back-to-back double-text from a test phone → exactly ONE reply
