@@ -126,6 +126,7 @@ export async function handleSimulate(req: Request, env: Env): Promise<Response> 
   return Response.json({
     ok: !!draft,
     reply: draft || null,
+    captured, // merged sticky qualifiers — lets a test client round-trip state like the prod DO
     violations: lastViolations,
     linkSentThisTurn,
     lastGuardrailReason: draft ? null : lastReason,
