@@ -7,6 +7,14 @@ export type Env = {
   SPIFFY_MODEL?: string;
   /** Persona selector: 'spiffy' (default) or 'meghan'. Set per-worker in wrangler config. */
   PERSONA?: string;
+  /**
+   * This persona's own outbound SMS line (E.164, e.g. "+19045551234"). When set,
+   * every send pins fromNumber to it, so in a multi-number subaccount the bot
+   * always replies from ITS line — never GHL's default-number fallback (which
+   * only bites the bot-initiated opener, since inbound replies inherit the
+   * thread's number). Unset (Spiffy today) = current behavior, GHL chooses.
+   */
+  SENDER_PHONE?: string;
   CONTACT_THREAD: DurableObjectNamespace;
   IDEMPOTENCY?: KVNamespace;
   DB?: D1Database;

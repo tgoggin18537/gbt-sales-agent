@@ -44,7 +44,7 @@ function headers(env: GhlEnv) {
 
 export async function sendSms(
   env: GhlEnv,
-  params: { contactId: string; message: string },
+  params: { contactId: string; message: string; fromNumber?: string },
 ): Promise<{ messageId: string }> {
   const res = await ghlFetch(`${env.baseUrl ?? DEFAULT_BASE}/conversations/messages`, {
     method: 'POST',
@@ -53,6 +53,9 @@ export async function sendSms(
       type: 'SMS',
       contactId: params.contactId,
       message: params.message,
+      // Pin the sending line when configured (multi-number subaccount).
+      // Omitted → GHL uses the thread's last-used number, else the location default.
+      ...(params.fromNumber ? { fromNumber: params.fromNumber } : {}),
     }),
   });
   if (!res.ok) throw new Error(`GHL sendSms ${res.status}: ${await res.text()}`);

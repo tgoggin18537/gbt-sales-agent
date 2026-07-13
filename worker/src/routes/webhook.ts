@@ -290,7 +290,7 @@ export async function handleInboundSms(
     const opener = openerFor(env);
     const sent = await sendSms(
       { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-      { contactId, message: opener },
+      { contactId, message: opener, fromNumber: env.SENDER_PHONE },
     );
     await stub.fetch('https://do/append', {
       method: 'POST',
@@ -797,7 +797,7 @@ export async function handleInboundSms(
 
       const sent = await sendSms(
         { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
-        { contactId, message: candidate },
+        { contactId, message: candidate, fromNumber: env.SENDER_PHONE },
       );
 
       // AT-MOST-ONCE (drain mode): record the sent ids into the processed ring
