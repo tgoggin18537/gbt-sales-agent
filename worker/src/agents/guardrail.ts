@@ -340,6 +340,8 @@ export type GuardrailInput = {
   inboundText?: string;
   /** Lengths of recent assistant messages (for rhythm variance check). */
   priorAssistantLengths?: number[];
+  /** Persona-specific bans checked alongside the global lists (regenerate on hit). */
+  extraBannedPhrases?: RegExp[];
 };
 
 export type GuardrailResult =
@@ -446,6 +448,17 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
       return {
         ok: false,
         reason: `banned phrase: ${rx}`,
+        violations: [...violations, 'banned_phrase'],
+      };
+    }
+  }
+
+  // 4c. Persona-specific banned phrases -> regenerate.
+  for (const rx of input.extraBannedPhrases ?? []) {
+    if (rx.test(text)) {
+      return {
+        ok: false,
+        reason: `persona banned phrase: ${rx}`,
         violations: [...violations, 'banned_phrase'],
       };
     }

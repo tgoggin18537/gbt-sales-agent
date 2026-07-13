@@ -6,7 +6,7 @@
  * Everything defaults to Spiffy so existing deployments are untouched.
  */
 import { SPIFFY_SYSTEM_PROMPT } from './spiffy';
-import { MEGHAN_SYSTEM_PROMPT, MEGHAN_OPENER } from './meghan';
+import { MEGHAN_SYSTEM_PROMPT, MEGHAN_OPENER, MEGHAN_BANNED_PHRASES } from './meghan';
 import { renderFaqForPrompt } from './faq';
 
 export type PersonaKey = 'spiffy' | 'meghan';
@@ -32,4 +32,9 @@ export function systemCachedFor(env: { PERSONA?: string }): string {
 
 export function openerFor(env: { PERSONA?: string }): string {
   return personaKey(env) === 'meghan' ? MEGHAN_OPENER : SPIFFY_OPENER;
+}
+
+/** Persona-specific mechanical bans for the guardrail. Spiffy: none extra. */
+export function extraBannedFor(env: { PERSONA?: string }): RegExp[] | undefined {
+  return personaKey(env) === 'meghan' ? MEGHAN_BANNED_PHRASES : undefined;
 }

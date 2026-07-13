@@ -15,7 +15,7 @@
 
 import { callClaude } from '../integrations/anthropic';
 import { buildTurnContext } from '../prompts/spiffy';
-import { systemCachedFor, personaKey } from '../prompts/persona';
+import { systemCachedFor, personaKey, extraBannedFor } from '../prompts/persona';
 import { applyGuardrail } from '../agents/guardrail';
 import { extractQualifiers } from '../agents/classifier';
 import type { Env } from '../env';
@@ -96,6 +96,7 @@ export async function handleSimulate(req: Request, env: Env): Promise<Response> 
       temperature: 0.8,
     });
     const guard = applyGuardrail({
+        extraBannedPhrases: extraBannedFor(env),
       candidate: res.text,
       linkSendCountBefore: state.linkSendCount ?? 0,
       isFirstMessage: !(state.openerSent ?? false),

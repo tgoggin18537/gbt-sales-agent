@@ -1,12 +1,13 @@
 # Meghan Bot V1 — Live Sample Conversations
 
 Run against the deployed bot (gbt-meghan, July 13). Lead messages are real
-scenario tests; Meghan replies are the bot, unedited.
+scenario tests; Meghan replies are the bot, unedited. Voice rules are backed
+by a quantitative study of her 2,852 real messages (MEGHAN_VOICE_ANALYSIS.md).
 
 ## 1. Unsure on destination + asks for everything
 > **Lead:** Not sure yet. Could I get the details for all of them
 >
-> **Meghan:** Of course! Do you have a destination in mind, or would you like me to make some recommendations?
+> **Meghan:** Yes! Do you have a destination in mind, or would you like me to make some recommendations?
 
 ## 2. Product question mid-flow
 > **Lead:** is it all inclusive?
@@ -21,7 +22,7 @@ scenario tests; Meghan replies are the bot, unedited.
 ## 4. Group hesitation
 > **Lead:** actually let me talk to my friends first before we go further
 >
-> **Meghan:** Of course! Just keep in mind rooms do fill as we get closer. Want me to email you the options so you can share them with the group?
+> **Meghan:** Totally fine! Just keep in mind rooms do fill as we get closer. Want me to email you the options so you can share them with the group?
 
 ## 5. Price pushback (Cabo group of 6)
 > **Lead:** got it but honestly this is more than we wanted to spend

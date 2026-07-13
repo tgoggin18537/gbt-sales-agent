@@ -26,7 +26,7 @@ import {
 } from '../integrations/ghl';
 import type { ClassifierResult } from '../integrations/ghl';
 import { buildTurnContext } from '../prompts/spiffy';
-import { systemCachedFor, personaKey, openerFor } from '../prompts/persona';
+import { systemCachedFor, personaKey, openerFor, extraBannedFor } from '../prompts/persona';
 import { applyGuardrail } from '../agents/guardrail';
 import {
   classifyExistingPatient,
@@ -663,6 +663,7 @@ export async function handleInboundSms(
         }
 
         const guard = applyGuardrail({
+        extraBannedPhrases: extraBannedFor(env),
           candidate: claudeRes.text,
           linkSendCountBefore: currentState.linkSendCount,
           isFirstMessage: !currentState.openerSent,
