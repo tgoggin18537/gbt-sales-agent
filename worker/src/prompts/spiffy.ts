@@ -723,7 +723,7 @@ export function buildTurnContext(ctx: {
   if (!ctx.destination && ctx.destinationOptions && ctx.destinationOptions.length >= 2) {
     if (ctx.persona === 'meghan') {
       parts.push(
-        `DESTINATION IS BEING DISCUSSED. The lead is weighing: ${ctx.destinationOptions.join(', ')}. They have ALREADY answered the destination question — do NOT re-ask it (asking again will get blocked). Acknowledge count-agnostically ("Those are all great options!"), recommend the most popular pick per DESTINATION PUSH LOGIC, and ask which one they're leaning toward. Move the conversation forward, don't loop on the destination question.`,
+        `DESTINATION IS BEING DISCUSSED. The lead is weighing: ${ctx.destinationOptions.join(', ')}. They have ALREADY answered the destination question — do NOT re-ask it (asking again will get blocked). Acknowledge WITHOUT lumping them as interchangeable — these are different places (e.g. Cancun = Mexico, Punta Cana = Dominican Republic), so say they're each a little different, then recommend the most popular pick per DESTINATION PUSH LOGIC and ask what vibe they're going for / which they're leaning toward. Keep it count-agnostic (never "both"). Move the conversation forward, don't loop on the destination question.`,
       );
     } else {
       parts.push(

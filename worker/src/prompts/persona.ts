@@ -25,7 +25,7 @@ export function systemCachedFor(env: { PERSONA?: string }): string {
   const k = personaKey(env);
   if (!cache[k]) {
     const base = k === 'meghan' ? MEGHAN_SYSTEM_PROMPT : SPIFFY_SYSTEM_PROMPT;
-    cache[k] = `${base}\n\n${renderFaqForPrompt()}`;
+    cache[k] = `${base}\n\n${renderFaqForPrompt(k)}`;
   }
   return cache[k]!;
 }

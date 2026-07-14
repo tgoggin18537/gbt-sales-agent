@@ -805,24 +805,40 @@ export const OBJECTIONS: FaqEntry[] = [
 ];
 
 /** Rendered for inclusion in the system prompt. */
-export function renderFaqForPrompt(): string {
+export function renderFaqForPrompt(persona: 'spiffy' | 'meghan' = 'spiffy'): string {
+  const meghan = persona === 'meghan';
+  // The reference answers are Spiffy-voiced. For Meghan they are FACTS ONLY —
+  // she rephrases in her own voice. A few entries carry Spiffy-specific moves
+  // that bleed badly if copied verbatim (e.g. lumping destinations with "those
+  // are all a vibe" when Cancun/Punta Cana are completely different places), so
+  // override those for Meghan rather than hope she reinterprets them.
+  const MEGHAN_OVERRIDES: Record<string, string> = {
+    'compare destinations':
+      "They're each a little different! Punta Cana has been our most popular this year, biggest college crowd and our staff on site. What kind of vibe are you going for?",
+  };
+  const label = meghan ? 'Reference (facts only, say it in YOUR voice)' : "Spiffy's vibe";
+  const ans = (e: { triggers: string[]; answer: string }) =>
+    (meghan && MEGHAN_OVERRIDES[e.triggers[0]]) || e.answer;
   const faqLines = FAQ.map(
-    (e) => `When they ask about: ${e.triggers[0]}\nSpiffy's vibe: "${e.answer}"${e.notes ? `\nNote: ${e.notes}` : ''}`,
+    (e) => `When they ask about: ${e.triggers[0]}\n${label}: "${ans(e)}"${e.notes && !meghan ? `\nNote: ${e.notes}` : ''}`,
   ).join('\n\n');
   const objLines = OBJECTIONS.map(
-    (e) => `When they say: ${e.triggers[0]}\nSpiffy's vibe: "${e.answer}"`,
+    (e) => `When they say: ${e.triggers[0]}\n${label}: "${ans(e)}"`,
   ).join('\n\n');
   const rxnLines = Object.entries(DESTINATION_REACTIONS)
     .map(([k, v]) => `${k}: "${v}"`)
     .join('\n');
+  const who = meghan
+    ? '# REFERENCE ANSWERS (another rep\'s voice — use for FACTS ONLY, always rephrase in your own warm voice; never copy the slang or the phrasing, and never lump different destinations together)'
+    : '# HOW SPIFFY ACTUALLY ANSWERS THESE (voice reference, NOT a script to recite. Adapt naturally based on the conversation. Never read these back word for word.)';
   return [
-    '# DESTINATION RAPPORT REACTIONS (natural beats, not scripts)',
+    '# DESTINATION RAPPORT REACTIONS (facts/positioning only' + (meghan ? ', rephrase in your voice' : ', natural beats, not scripts') + ')',
     rxnLines,
     '',
-    '# HOW SPIFFY ACTUALLY ANSWERS THESE (voice reference, NOT a script to recite. Adapt naturally based on the conversation. Never read these back word for word.)',
+    who,
     faqLines,
     '',
-    '# HOW SPIFFY HANDLES PUSHBACK (same rule — absorb the vibe, dont parrot)',
+    meghan ? '# PUSHBACK REFERENCE (facts only — answer in your own voice)' : '# HOW SPIFFY HANDLES PUSHBACK (same rule — absorb the vibe, dont parrot)',
     objLines,
   ].join('\n');
 }
