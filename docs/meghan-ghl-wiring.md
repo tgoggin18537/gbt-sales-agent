@@ -124,35 +124,31 @@ The worker reads: `contactId`, `messageId`, `messageType`, `body`, `phone`,
 }
 ```
 
-**First-Touch workflow body (opener):**
-```json
-{
-  "type": "InitialTouch",
-  "contactId": "{{contact.id}}",
-  "messageId": "initial-{{contact.id}}",
-  "messageType": "SMS",
-  "body": "__INITIAL_TOUCH__",
-  "phone": "{{contact.phone}}",
-  "tags": "{{contact.tags}}"
-}
-```
-`__INITIAL_TOUCH__` is the sentinel that tells the worker to send Meghan's
-opener (it dedupes if an opener-shaped message already went out).
+**First-Touch: NO webhook.** In the current setup GHL owns the opener (a
+hardcoded Send-SMS step), so the first-touch workflow does NOT call the worker.
+The `__INITIAL_TOUCH__` sentinel is a no-op on the Meghan worker (EXTERNAL_OPENER
+=1). Do not add a Custom Webhook to the first-touch workflow. (Reference only:
+Spiffy's older pattern POSTed `body: "__INITIAL_TOUCH__"` to have the worker send
+the opener — not used for Meghan.)
 
 ---
 
 ## The workflows (clone Spiffy's; these are the specs)
 
-### Meghan · 01 First Touch
+### Meghan · 01 First Touch  (opener is hardcoded here — no worker call)
 - **Trigger:** Contact tag added `meghan-lead` (or Contact Created filtered to
   Meghan's assigned line/pipeline). This is the ownership gate — it MUST be
   mutually exclusive with Spiffy's trigger.
-- **Step 1:** Wait 5 minutes.
+- **Step 1:** Assign to user = Meghan (so sends go from her line).
 - **Step 2:** If/Else — if any shutoff tag present → end.
-- **Step 3:** Send SMS (the automated intro) **from Meghan's number** — this
-  establishes the thread on her line (see CRITICAL section).
-- **Step 4:** Custom Webhook — First-Touch body above.
-- **Step 5:** End. (Worker adds `ai-bot-engaged` itself.)
+- **Step 3:** Send SMS — the automated intro ("Hey, this is Meghan Jenkins from
+  Go Blue Tours!…") **from Meghan's number**. Establishes the thread on her line.
+- **Step 4:** Wait ~5 min (her real cadence), then Send SMS — the opener, as TWO
+  bubbles with a 3s wait between: `Hey! It's Meghan from Go Blue :)` then
+  `Which week is your spring break? I'll send over the options we have avail`.
+- **Step 5:** Add Tag `ai-bot-engaged`. End.
+- **NO Custom Webhook step.** The worker only enters on the lead's first reply
+  (Inbound Reply workflow). GHL owns every word of the opener.
 
 ### Meghan · 02 Inbound Reply
 - **Trigger:** Customer Replied → Channel = SMS, **scoped to Meghan's line.**
