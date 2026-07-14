@@ -197,7 +197,7 @@ the contact API, so `tags` is not needed in this body.
 
 When a lead gives their email, the worker fires the `send-breakdown-email` tag
 (first capture only). Build:
-- **Meghan · Quote Email** workflow: trigger `send-breakdown-email` → back
+- **Meghan · Quote Email** workflow: trigger `send-breakdown-email-meghan` (her worker fires this persona-namespaced tag as of Jul 14 — Spiffy keeps `send-breakdown-email`) → back
   office sends the quote (or task to send) → add `breakdown-sent`, remove
   `send-breakdown-email`.
 
