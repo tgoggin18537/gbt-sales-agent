@@ -42,6 +42,20 @@ same lead.
 
 ---
 
+## CRITICAL: the opener is owned by GHL, not the worker
+
+Meghan's opener is a hardcoded GHL Send-SMS first-touch step (see workflows
+below), NOT the worker. The worker must therefore NEVER send its own opener and
+never reintroduce her. This is enforced by the `EXTERNAL_OPENER=1` secret on the
+gbt-meghan worker (already set), which:
+- makes the `__INITIAL_TOUCH__` webhook a no-op (worker won't send an opener), and
+- injects an "ALREADY INTRODUCED" instruction into the model's turn context so
+  it responds to the lead's first message instead of greeting again.
+
+Do NOT leave a Custom Webhook `__INITIAL_TOUCH__` action in Meghan's first-touch
+workflow — it's redundant now (worker no-ops it) and wastes a premium execution.
+The opener lives in exactly one place: the GHL Send-SMS step.
+
 ## CRITICAL: making Meghan send from HER line (do not skip)
 
 GHL picks the outbound number like this (confirmed via API docs):

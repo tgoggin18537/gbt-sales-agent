@@ -640,8 +640,22 @@ export function buildTurnContext(ctx: {
   nowOverride?: Date;
   /** Persona whose voice the injected coaching lines use. Default spiffy. */
   persona?: 'spiffy' | 'meghan';
+  /**
+   * True when the opener/intro was already sent OUTSIDE the worker (a GHL
+   * first-touch workflow owns it — see EXTERNAL_OPENER). The model must then
+   * never reintroduce itself; it responds to the lead's message directly.
+   * This is an explicit instruction, not a guardrail flag, because only the
+   * prompt controls what the model writes.
+   */
+  openerAlreadySent?: boolean;
 }): string {
   const parts: string[] = ['# TURN CONTEXT'];
+
+  if (ctx.openerAlreadySent) {
+    parts.push(
+      'ALREADY INTRODUCED: You have ALREADY greeted this lead and sent your opener (it went out just before this). This is NOT a first message. Do NOT reintroduce yourself, do NOT send any greeting like "Hey! It\'s Meghan from Go Blue" or "What\'s good, it\'s Spiffy", and do NOT re-send the opening week question as if the conversation just started. Respond directly and naturally to what the lead just said, continuing the conversation from where it stands.',
+    );
+  }
 
   // v4.5 Section 3.1: inject current-month seasonal framing every turn.
   // The architectural fix for the "Jan 1" hallucination is two layers:

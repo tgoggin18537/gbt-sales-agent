@@ -68,6 +68,7 @@ export async function handleSimulate(req: Request, env: Env): Promise<Response> 
   };
   const turnCtx = buildTurnContext({
     persona: personaKey(env),
+    openerAlreadySent: !!env.EXTERNAL_OPENER || (state.openerSent ?? false),
     linkSendCount: state.linkSendCount ?? 0,
     goal: state.goal,
     painPoint: state.painPoint,

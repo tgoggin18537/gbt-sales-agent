@@ -238,6 +238,14 @@ export async function handleInboundSms(
   // Workflow 1 fires the 5-minute-after-add SMS by POSTing body=__INITIAL_TOUCH__.
   // Send the opener verbatim, do not call Claude on a sentinel string.
   if (inboundBody === '__INITIAL_TOUCH__') {
+    // GHL owns the opener for this persona — worker must never open.
+    if (env.EXTERNAL_OPENER) {
+      await stub.fetch('https://do/append', {
+        method: 'POST',
+        body: JSON.stringify({ openerSent: true, newState: 'engaged' }),
+      });
+      return Response.json({ skipped: 'external_opener_owned_by_ghl' });
+    }
     if (state.openerSent) {
       return Response.json({ skipped: 'opener_already_sent' });
     }
@@ -596,6 +604,7 @@ export async function handleInboundSms(
         destinationOptions: captured.destinationOptions,
         groupSize: captured.groupSize,
         school: captured.school,
+        openerAlreadySent: !!env.EXTERNAL_OPENER,
       });
       // History seeding:
       //   - DO has tracked turns → use DO as canonical source.
@@ -667,7 +676,7 @@ export async function handleInboundSms(
         persona: personaKey(env),
           candidate: claudeRes.text,
           linkSendCountBefore: currentState.linkSendCount,
-          isFirstMessage: !currentState.openerSent,
+          isFirstMessage: env.EXTERNAL_OPENER ? false : !currentState.openerSent,
           priorAssistantMessages: currentState.messages
             .filter((m) => m.role === 'assistant')
             .map((m) => m.content),

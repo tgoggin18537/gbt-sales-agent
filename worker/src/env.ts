@@ -15,6 +15,14 @@ export type Env = {
    * thread's number). Unset (Spiffy today) = current behavior, GHL chooses.
    */
   SENDER_PHONE?: string;
+  /**
+   * "1" when the opener is owned by GHL (a hardcoded Send-SMS first-touch
+   * workflow), not the worker. The worker then NEVER sends its own opener and
+   * NEVER treats an inbound as a first-message-to-open — it always responds to
+   * what the lead said. Prevents the double-opener when GHL already introduced
+   * the rep. Unset (Spiffy) = worker owns the opener as before.
+   */
+  EXTERNAL_OPENER?: string;
   CONTACT_THREAD: DurableObjectNamespace;
   IDEMPOTENCY?: KVNamespace;
   DB?: D1Database;
