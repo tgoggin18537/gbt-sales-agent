@@ -42,19 +42,20 @@ same lead.
 
 ---
 
-## CRITICAL: the opener is owned by GHL, not the worker
+## The opener is owned by the WORKER — identical to Spiffy (verified 2026-07-14)
 
-Meghan's opener is a hardcoded GHL Send-SMS first-touch step (see workflows
-below), NOT the worker. The worker must therefore NEVER send its own opener and
-never reintroduce her. This is enforced by the `EXTERNAL_OPENER=1` secret on the
-gbt-meghan worker (already set), which:
-- makes the `__INITIAL_TOUCH__` webhook a no-op (worker won't send an opener), and
-- injects an "ALREADY INTRODUCED" instruction into the model's turn context so
-  it responds to the lead's first message instead of greeting again.
+Confirmed from Spiffy's live "Send Initial Message" action: his opener is sent by
+the WORKER via a `__INITIAL_TOUCH__` webhook, NOT hardcoded in GHL. Meghan mirrors
+this exactly. The worker sends her opener AND records `openerSent=true`, so when
+the lead replies it answers instead of re-greeting. (An earlier attempt hardcoded
+her opener in GHL — that diverged from Spiffy and caused a double-opener. Reverted;
+the `EXTERNAL_OPENER` secret was deleted 2026-07-14.)
 
-Do NOT leave a Custom Webhook `__INITIAL_TOUCH__` action in Meghan's first-touch
-workflow — it's redundant now (worker no-ops it) and wastes a premium execution.
-The opener lives in exactly one place: the GHL Send-SMS step.
+Rule: Meghan's first-touch workflow is a CLONE of Spiffy's — a single
+`__INITIAL_TOUCH__` Custom Webhook, no hardcoded opener/intro SMS. Do NOT put a
+message containing her name + brand ("Meghan … Go Blue Tours") in a hardcoded step
+BEFORE the webhook — the worker treats that as "already opened" and skips its
+opener.
 
 ## CRITICAL: making Meghan send from HER line (do not skip)
 
@@ -83,7 +84,10 @@ Two defenses, use BOTH:
    echo "+1XXXXXXXXXX" | CLOUDFLARE_ACCOUNT_ID=48ed5f8777d0983ff1cef054fde51b35 \
      npx wrangler secret put SENDER_PHONE -c wrangler.meghan.toml
    ```
-   (Until set, behavior is unchanged — safe for inbound, opener uses GHL's pick.)
+   REQUIRED before real leads: the worker sends the opener, and with no thread
+   yet GHL uses the DEFAULT number. If that is Spiffy's line, her opener goes out
+   from HIS number and the lead's reply lands on HIS bot. `SENDER_PHONE` pins her
+   line and prevents this. (For testing with your own phone it's harmless.)
 
 Verify at first test: a bot reply shows **Meghan's number** as the sender in
 the GHL conversation, not Spiffy's.
@@ -124,31 +128,39 @@ The worker reads: `contactId`, `messageId`, `messageType`, `body`, `phone`,
 }
 ```
 
-**First-Touch: NO webhook.** In the current setup GHL owns the opener (a
-hardcoded Send-SMS step), so the first-touch workflow does NOT call the worker.
-The `__INITIAL_TOUCH__` sentinel is a no-op on the Meghan worker (EXTERNAL_OPENER
-=1). Do not add a Custom Webhook to the first-touch workflow. (Reference only:
-Spiffy's older pattern POSTed `body: "__INITIAL_TOUCH__"` to have the worker send
-the opener — not used for Meghan.)
+**First-Touch webhook body (verified against Spiffy's live action):**
+```json
+{
+  "type": "InitialTouch",
+  "contactId": "{{contact.id}}",
+  "body": "__INITIAL_TOUCH__",
+  "phone": "{{contact.phone}}"
+}
+```
+`__INITIAL_TOUCH__` tells the worker to send the persona's opener (it records
+`openerSent` so it won't double-open on the reply). The worker fetches tags via
+the contact API, so `tags` is not needed in this body.
 
 ---
 
 ## The workflows (clone Spiffy's; these are the specs)
 
-### Meghan · 01 First Touch  (opener is hardcoded here — no worker call)
+### Meghan · 01 First Touch  (CLONE of Spiffy's — worker sends the opener)
 - **Trigger:** Contact tag added `meghan-lead` (or Contact Created filtered to
-  Meghan's assigned line/pipeline). This is the ownership gate — it MUST be
-  mutually exclusive with Spiffy's trigger.
-- **Step 1:** Assign to user = Meghan (so sends go from her line).
+  Meghan's assigned line/pipeline). Ownership gate — mutually exclusive w/ Spiffy.
+- **Step 1:** Assign to user = Meghan (routing/ownership).
 - **Step 2:** If/Else — if any shutoff tag present → end.
-- **Step 3:** Send SMS — the automated intro ("Hey, this is Meghan Jenkins from
-  Go Blue Tours!…") **from Meghan's number**. Establishes the thread on her line.
-- **Step 4:** Wait ~5 min (her real cadence), then Send SMS — the opener, as TWO
-  bubbles with a 3s wait between: `Hey! It's Meghan from Go Blue :)` then
-  `Which week is your spring break? I'll send over the options we have avail`.
-- **Step 5:** Add Tag `ai-bot-engaged`. End.
-- **NO Custom Webhook step.** The worker only enters on the lead's first reply
-  (Inbound Reply workflow). GHL owns every word of the opener.
+- **Step 3:** Custom Webhook (identical to Spiffy's "Send Initial Message",
+  only the URL differs):
+  - Event CUSTOM, Method POST
+  - URL `https://gbt-meghan.gobluetours.workers.dev/webhook/ghl/inbound-sms`
+  - Header `x-ghl-webhook-secret` = `{{custom_values.xghlwebhooksecret}}`
+  - Content-Type application/json, Raw Body:
+    ```json
+    { "type": "InitialTouch", "contactId": "{{contact.id}}", "body": "__INITIAL_TOUCH__", "phone": "{{contact.phone}}" }
+    ```
+- **Step 4:** End. The worker sends her opener and adds `ai-bot-engaged` itself.
+- **NO hardcoded opener/intro SMS.** The worker owns every word of the opener.
 
 ### Meghan · 02 Inbound Reply
 - **Trigger:** Customer Replied → Channel = SMS, **scoped to Meghan's line.**
