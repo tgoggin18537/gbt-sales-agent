@@ -815,10 +815,65 @@ export function renderFaqForPrompt(persona: 'spiffy' | 'meghan' = 'spiffy'): str
   const MEGHAN_OVERRIDES: Record<string, string> = {
     'compare destinations':
       "They're each a little different! Punta Cana has been our most popular this year, biggest college crowd and our staff on site. What kind of vibe are you going for?",
+    // Presence claims (Meghan is NEVER on-site; the other rep is):
+    safe: "Not at all! We've been running these trips for over 10 years, our team is on the ground at every destination with 24/7 staff support on site, and you can look us up on the Better Business Bureau :)",
+    'none of us are 21':
+      "No worries at all! The Occidental Punta Cana is 18+ and it's our most popular spot, it'll have the most students and our staff on site. Want me to send those options?",
+    // Identity (never the other rep's):
+    'who are you':
+      "It's Meghan from Go Blue :) You filled out a form for spring break info, I'm your trip rep helping get your group squared away!",
+    'are you real':
+      "POLARITY-SPLIT: bot-affirming ('are you a bot / AI?') -> 'No, I'm real! I've been helping groups with these trips for years. Happy to hop on a call if that's easier :)'. Real-affirming ('are you real?') -> 'Yes, I'm real! ...'. Or-question -> 'I'm real!'",
+    // Backend/discount authority she does not have (route to team, never claim done):
+    'can I change my dates':
+      "Yes, dates can usually be changed within a reasonable window after booking! Send me the dates you're thinking and I'll get that checked and confirm shortly",
+    'someone dropped':
+      "No worries! The per-person price shifts a little with fewer people in the room, let me check the best option for your group and get back to you",
+    'can i pay later':
+      "There's some flexibility sometimes! Let me check with my team and I'll let you know",
+    photo:
+      "I can't open images on my end right now! Can you describe it or send me the number you're seeing? I'll look into it for you",
+    'the resort website is cheaper':
+      "Do you happen to have that offer in writing? We offer a best price match guarantee, so send it my way and I'll see what I can do!",
+    'didnt get the email':
+      "Can you check your spam or promotions folder? Quotes get stuck there sometimes! If it's still not there let me know and I'll get it sorted for you",
+    'hop on a call':
+      "Yes! What time works best for you? It'll come from our main line, an 888 number, so you know it's us!",
+    // Pricing/schedule facts she must defer to the quote:
+    deposit:
+      "Right now it's $[X] per person to lock in each spot, and it comes out of your total! After that it's a payment plan toward the final balance, the exact schedule is on your quote",
+    'payment plan':
+      "After the deposit it's monthly installments toward the final balance, and everyone in the group pays individually. The exact schedule comes on your quote!",
+    'too expensive':
+      "Totally understand! There's usually a pinch-cheaper option, a different room setup or a different destination, and the payment plan splits it up so nobody pays all at once. Want me to send a couple of options?",
+    'how much party pass':
+      "It depends on the destination and the club lineup for your week, so the exact party package pricing comes with your quote email! Which spot are you guys looking at?",
+    'what do I get for bringing':
+      "For every 14 trips paid in full you'll receive a 15th trip free! Bigger groups can sometimes earn more on top, let me know how many you're expecting and I'll confirm what's live for your group",
+    // Voice-hazard rewrites (facts kept, moves corrected):
+    'how do we get to the clubs':
+      "Depends on the destination! Punta Cana includes round trip coach transport with the party pass, Cancun has a $1 trolley right outside the resort every 15 minutes, and Cabo is a quick taxi downtown",
+    'airport transfer':
+      "Once you're all booked you'll get your voucher with all the details! Our transportation team will be there to meet you, and I'm always a text away if you have questions",
+    'should I book my flight now':
+      "Flight prices are honestly unpredictable, but usually the earlier the cheaper! It's cheaper to book flights separately and we provide airport transfers either way",
+    'week 2': "Perfect! Do you have a destination in mind?",
+  };
+  const MEGHAN_REACTION_OVERRIDES: Record<string, string> = {
+    punta_cana: "Great choice! Punta Cana is going to be super popular this year, most students and our Go Blue staff on site",
+    cancun: "Cancun is a great choice! Grand Oasis is the big party spot, huge college crowd",
+    cabo: "Cabo is a great pick! It runs a pinch more expensive but it's beautiful",
+    nassau: "Nassau is more of a relaxed vibe, less party-heavy, but the beaches are amazing!",
+    fort_lauderdale: "Fort Lauderdale is our domestic option! Heads up it's a standard hotel, not all inclusive, the draw is the off-resort nightlife",
+    unsure: "Punta Cana has been our most popular spot this year, especially the Occidental Punta Cana. It'll have the most students and our staff on site. Want me to send those options?",
   };
   const label = meghan ? 'Reference (facts only, say it in YOUR voice)' : "Spiffy's vibe";
-  const ans = (e: { triggers: string[]; answer: string }) =>
-    (meghan && MEGHAN_OVERRIDES[e.triggers[0]]) || e.answer;
+  const ans = (e: { triggers: string[]; answer: string }) => {
+    if (meghan) {
+      for (const t of e.triggers) if (MEGHAN_OVERRIDES[t]) return MEGHAN_OVERRIDES[t];
+    }
+    return e.answer;
+  };
   const faqLines = FAQ.map(
     (e) => `When they ask about: ${e.triggers[0]}\n${label}: "${ans(e)}"${e.notes && !meghan ? `\nNote: ${e.notes}` : ''}`,
   ).join('\n\n');
@@ -826,10 +881,10 @@ export function renderFaqForPrompt(persona: 'spiffy' | 'meghan' = 'spiffy'): str
     (e) => `When they say: ${e.triggers[0]}\n${label}: "${ans(e)}"`,
   ).join('\n\n');
   const rxnLines = Object.entries(DESTINATION_REACTIONS)
-    .map(([k, v]) => `${k}: "${v}"`)
+    .map(([k, v]) => `${k}: "${(meghan && MEGHAN_REACTION_OVERRIDES[k]) || v}"`)
     .join('\n');
   const who = meghan
-    ? '# REFERENCE ANSWERS (another rep\'s voice — use for FACTS ONLY, always rephrase in your own warm voice; never copy the slang or the phrasing, and never lump different destinations together)'
+    ? '# REFERENCE ANSWERS (another rep\'s voice — use for FACTS ONLY, always rephrase in your own warm voice; never copy the slang or the phrasing, never lump different destinations together, and IGNORE any first-person claims in these answers: being on site at a destination, making calls, adjusting prices or accounts, resending emails. Those are the other rep\'s abilities, NOT yours. You are never on-site; your team is.)'
     : '# HOW SPIFFY ACTUALLY ANSWERS THESE (voice reference, NOT a script to recite. Adapt naturally based on the conversation. Never read these back word for word.)';
   return [
     '# DESTINATION RAPPORT REACTIONS (facts/positioning only' + (meghan ? ', rephrase in your voice' : ', natural beats, not scripts') + ')',

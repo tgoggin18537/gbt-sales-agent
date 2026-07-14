@@ -44,7 +44,10 @@ const ENGAGED_TAG = 'ai-bot-engaged';
 // contact with this so a GHL workflow fires the breakdown email send. The
 // workflow then adds 'breakdown-sent' (informational) and removes this tag.
 // See docs/ghl-email-workflow.md for the GHL setup.
-const SEND_BREAKDOWN_TAG = 'send-breakdown-email';
+// Persona-namespaced so Meghan's email capture cannot fire Spiffy's SBU-branded
+// breakdown workflow in the shared GHL location (and vice versa).
+const sendBreakdownTagFor = (env: { PERSONA?: string }) =>
+  personaKey(env) === 'meghan' ? 'send-breakdown-email-meghan' : 'send-breakdown-email';
 
 // Spiffy's cold opener. Single-message per Phase 2 decision (multi-bubble
 // split deferred to V2 infra upgrade). Pulled verbatim style from his
@@ -55,7 +58,7 @@ const SEND_BREAKDOWN_TAG = 'send-breakdown-email';
 // out the full debounce window — collapse to HOT_WINDOW. Cheap regex, no LLM.
 // Vocabulary mirrors classifyAgreedToBook (classifier.ts) plus pay/deposit cues.
 const HOT_LEAD_RE =
-  /\b(send (it|me|the link|that|over)|drop the link|gimme the link|book me|sign me up|lets (do it|run it|go|book)|i'?m in|we'?re? (in|ready)|lock (it|me|this) in|ready to (book|go|pay)|deposit|venmo|zelle|how do i pay|put me down|where do i pay)\b/i;
+  /\b(send (it|me|the link|that|over)|drop the link|gimme the link|book me|sign me up|let'?s (do it|run it|go|book)|i'?m in|we'?re? (in|ready)|lock (it|me|this) in|ready to (book|go|pay)|deposit|venmo|zelle|how do (i|we) (pay|book)|put me down|where do (i|we) pay)\b/i;
 export function isHotLead(body: string): boolean {
   if (!body) return false;
   if (extractEmail(body)) return true; // dropping an email = ready to move
@@ -273,7 +276,7 @@ export async function handleInboundSms(
           const text = h.content;
           return (
             (personaKey(env) === 'meghan' ? /\bMeghan\b/i : /\bSpiffy\b/i).test(text) &&
-            (/\bSpringBreak\s*U\b/i.test(text) || /\bGo\s*Blue\s*Tours\b/i.test(text))
+            (/\bSpringBreak\s*U\b/i.test(text) || /\bGo\s*Blue(?:\s*Tours)?\b/i.test(text))
           );
         });
         if (workflowSentOpener) {
@@ -473,7 +476,7 @@ export async function handleInboundSms(
       const text = h.content;
       return (
         (personaKey(env) === 'meghan' ? /\bMeghan\b/i : /\bSpiffy\b/i).test(text) &&
-        (/\bSpringBreak\s*U\b/i.test(text) || /\bGo\s*Blue\s*Tours\b/i.test(text))
+        (/\bSpringBreak\s*U\b/i.test(text) || /\bGo\s*Blue(?:\s*Tours)?\b/i.test(text))
       );
     });
     if (workflowSentOpener) {
@@ -831,7 +834,7 @@ export async function handleInboundSms(
       // Whether THIS send is the school gas-up and the `hype-up` tag should
       // fire. Gated on the persisted hypeSent flag so it fires at most once
       // per contact across drain passes / rapid-fire batches.
-      const fireHype = hypeSentThisTurn && !currentState.hypeSent;
+      const fireHype = hypeSentThisTurn && !currentState.hypeSent && personaKey(env) !== 'meghan';
 
       // Email capture: scan only the newest pending message body (the one
       // most likely to contain a freshly-typed email). Cheap regex, no harm
@@ -901,7 +904,7 @@ export async function handleInboundSms(
           await addTag(
             { locationId: env.GHL_LOCATION_ID, apiKey: env.GHL_API_KEY },
             contactId,
-            SEND_BREAKDOWN_TAG,
+            sendBreakdownTagFor(env),
           );
         } catch (err) {
           console.error('Failed to add send-breakdown-email tag:', err);

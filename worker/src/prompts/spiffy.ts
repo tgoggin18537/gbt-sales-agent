@@ -571,14 +571,14 @@ export function seasonForMonth(monthIndex0: number): {
     return {
       season: 'january_peak_close',
       framing:
-        'Peak close month. Maximum urgency. Short deposit windows (2-3 days). Lean into urgency hard — its legitimate this month.',
+        'Peak close month. Maximum urgency. Deposit windows on quotes are short this month, but NEVER quote a number of days to the lead — the window lives on their quote. Lean into urgency hard — its legitimate this month.',
     };
   }
   if (monthIndex0 === 1) {
     return {
       season: 'february_slowing',
       framing:
-        'Slowing. Inventory constraints. Only push availability urgency if we actually have rooms for their week.',
+        'Slowing. Real inventory constraints this late — but you have NO live inventory feed, so never claim specific rooms remain. Availability urgency stays generic (popular weeks fill).',
     };
   }
   if (monthIndex0 >= 2 && monthIndex0 <= 3) {
@@ -653,7 +653,9 @@ export function buildTurnContext(ctx: {
 
   if (ctx.openerAlreadySent) {
     parts.push(
-      'ALREADY INTRODUCED: You have ALREADY greeted this lead and sent your opener (it went out just before this). This is NOT a first message. Do NOT reintroduce yourself, do NOT send any greeting like "Hey! It\'s Meghan from Go Blue" or "What\'s good, it\'s Spiffy", and do NOT re-send the opening week question as if the conversation just started. Respond directly and naturally to what the lead just said, continuing the conversation from where it stands.',
+      ctx.persona === 'meghan'
+        ? 'ALREADY INTRODUCED: You have ALREADY greeted this lead and sent your opener (it went out just before this). This is NOT a first message. Do NOT reintroduce yourself, do NOT send any greeting like "Hey! It\'s Meghan from Go Blue", and do NOT re-send the opening week question as if the conversation just started. Respond directly and naturally to what the lead just said.'
+        : 'ALREADY INTRODUCED: You have ALREADY greeted this lead and sent your opener (it went out just before this). This is NOT a first message. Do NOT reintroduce yourself, do NOT send any greeting like "What\'s good, it\'s Spiffy", and do NOT re-send the opening week question as if the conversation just started. Respond directly and naturally to what the lead just said.',
     );
   }
 
@@ -680,17 +682,21 @@ export function buildTurnContext(ctx: {
   if (typeof ctx.depositAmount === 'number' && ctx.depositAmount > 0) {
     const d = ctx.depositAmount;
     parts.push(
-      `CURRENT DEPOSIT AMOUNT: $${d} per person. Wherever the prompt or an example shows "$[X]", or you quote the deposit, use exactly $${d}. The per-person deposit to lock a spot is $${d}; never quote any other deposit figure. Frame as "right now its $${d}", never anchor to a calendar date. (The $100/month installment figure is separate and unchanged.)`,
+      ctx.persona === 'meghan'
+        ? `CURRENT DEPOSIT AMOUNT: $${d} per person. Wherever the prompt or an example shows "$[X]", or you quote the deposit, use exactly $${d}. Never quote any other deposit figure. Frame it warmly in your own voice, e.g. "It's $${d} per person right now", and never anchor it to a calendar date.`
+        : `CURRENT DEPOSIT AMOUNT: $${d} per person. Wherever the prompt or an example shows "$[X]", or you quote the deposit, use exactly $${d}. The per-person deposit to lock a spot is $${d}; never quote any other deposit figure. Frame as "right now its $${d}", never anchor to a calendar date. (The $100/month installment figure is separate and unchanged.)`,
     );
   } else {
     parts.push(
-      `CURRENT DEPOSIT AMOUNT: not loaded this turn. Do NOT quote a specific per-person deposit dollar amount, and never output the literal "$[X]". If the lead asks about the deposit, say youll confirm the exact deposit for their group and send it over. The $100/month installment cadence is still fine to mention.`,
+      ctx.persona === 'meghan'
+        ? `CURRENT DEPOSIT AMOUNT: not loaded this turn. Do NOT quote a specific per-person deposit dollar amount, and never output the literal "$[X]". If the lead asks about the deposit, say you'll confirm the exact amount for their group and send it over. The payment plan cadence (deposit, then installments toward the final balance, exact schedule on their quote) is fine to describe.`
+        : `CURRENT DEPOSIT AMOUNT: not loaded this turn. Do NOT quote a specific per-person deposit dollar amount, and never output the literal "$[X]". If the lead asks about the deposit, say youll confirm the exact deposit for their group and send it over. The $100/month installment cadence is still fine to mention.`,
     );
   }
 
   // Lead brand context. Determines which name the bot uses when
   // signing off / referring to the company. Default = SpringBreak U.
-  const brand = ctx.brand ?? 'SpringBreak U';
+  const brand = ctx.brand ?? (ctx.persona === 'meghan' ? 'Go Blue Tours' : 'SpringBreak U');
   parts.push(
     `LEAD BRAND: ${brand}. Sign / refer to the company as "${brand}" in this conversation. ${brand === 'Go Blue Tours' ? "If asked, SpringBreak U is the sister brand." : "If asked, Go Blue Tours is the parent / sister brand."}`,
   );

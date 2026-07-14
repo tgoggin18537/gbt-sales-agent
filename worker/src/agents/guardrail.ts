@@ -61,7 +61,9 @@ const BANNED_PHRASES: RegExp[] = [
   /\bwhat'?s on your radar\b/i,
   /\bwhat brings you here\b/i,
   // "I/we [('ll|will|'m|am|'re|are|'ve|have|'d|would)] reach(ed|ing) out"
-  /\b(I|we)(?:'ll|\s+will|'m|\s+am|'re|\s+are|'ve|\s+have|'d|\s+would)?\s+reach(?:ed|ing)?\s+out\b/i,
+  // EXCEPT future-conditional ("I'll reach out if/when/once...") — that is the
+  // MANDATED wait-release follow-up hook for both personas, not an AI tell.
+  /\b(I|we)(?:'ll|\s+will|'m|\s+am|'re|\s+are|'ve|\s+have|'d|\s+would)?\s+reach(?:ed|ing)?\s+out\b(?!\s+(?:if|when|once)\b)/i,
   // "I/we (just) want(ed) to reach out"
   /\b(I|we)(?:\s+just)?\s+want(?:ed)?\s+to\s+reach\s+out\b/i,
   // "just want(ed) to reach out / check in / follow up" (no I/we anchor)
@@ -183,6 +185,7 @@ const BANNED_PHRASES: RegExp[] = [
 // impersonate or route to them by name. See SPIFFY_V2_QUESTIONS.md to
 // expand.
 const STAFF_NAMES = [
+  'Ivy', // Meghan-corpus back-office name (quote emails "from Ivy")
   'Vivian',
   'Ashton',
   'Alex',
@@ -213,11 +216,11 @@ const HALLUCINATED_LINK_PATTERN =
 // these sparingly (evidence in Phase 2 voice synthesis) but over-use
 // is the #1 bot tell. Same mechanism as goal-menu repeat: if any prior
 // assistant message already contained the phrase, reject on the next.
-const AI_TELL_PATTERNS: { name: string; rx: RegExp }[] = [
+const AI_TELL_PATTERNS: { name: string; rx: RegExp; meghanRx?: RegExp }[] = [
   { name: 'i_understand', rx: /\bI understand\b/i },
   { name: 'i_hear_you', rx: /\bI hear you\b/i },
   { name: 'happy_to_help', rx: /\bhappy to help\b/i },
-  { name: 'totally', rx: /\btotally\b/i },
+  { name: 'totally', rx: /\btotally\b/i, meghanRx: /\bI totally understand\b/i },
   { name: 'i_feel_you', rx: /\bI feel you\b/i },
 ];
 
@@ -323,7 +326,7 @@ const EMOJI_REGEX =
 // through info requests (quals before the email pivot), so the
 // qualifier-tack-on guard must not fire on these inbounds.
 const INFO_REQUEST_INBOUND: RegExp =
-  /\b(?:send|shoot|text|get|see|have)\b[^.?!\n]*\b(?:details?|info(?:rmation)?|breakdown|options?|pricing|prices?)\b|\bwhat (?:do you|you|u|do u) got\b|\bmore info\b/i;
+  /\b(?:send|shoot|text|get|see|have)\b[^.?!\n]*\b(?:details?|info(?:rmation)?|breakdown|options?|pricing|prices?|all of them|everything)\b|\bwhat (?:do you|you|u|do u) (?:got|have)\b|\bmore info\b/i;
 
 const SOFT_TURN_INBOUND: RegExp[] = [
   /\b(?:thanks|thank you|thx|ty|appreciate it)\b/i,
@@ -403,13 +406,26 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
   //     acknowledgment pattern, so legit uses ("both of you need to be
   //     21", "both nights") are untouched.
   {
-    const before = text;
-    text = text
-      .replace(/\bthose are both\b/gi, 'those are all')
-      .replace(/\bthey'?re both\b/gi, input.persona === 'meghan' ? "they're all" : 'theyre all')
-      .replace(/\bboth are (a vibe|solid|great|lit|dope|fire|good options|great options)\b/gi, input.persona === 'meghan' ? "they're all $1" : 'theyre all $1')
-      .replace(/\byea,?\s+both\b(?=[^.?!]*\b(vibe|solid|great|lit|dope|fire|option)\b)/gi, 'yea theyre all');
-    if (text !== before) violations.push('destination_both_to_all');
+    const LUMP_RX = /\bthose are both\b|\bthey'?re both\b|\bboth are (?:a vibe|solid|great|lit|dope|fire|good options|great options)\b|\byea,?\s+both\b(?=[^.?!]*\b(?:vibe|solid|great|lit|dope|fire|option)\b)|\b(?:those are|they'?re) all (?:great(?: options)?|a vibe|solid|the same)\b/i;
+    if (input.persona === 'meghan') {
+      // Meghan NEVER lumps destinations as interchangeable (they are different
+      // places) — reject and regenerate with a distinguishing answer.
+      if (LUMP_RX.test(text)) {
+        return {
+          ok: false,
+          reason: "never lump destinations as interchangeable — they're each different places. Distinguish them (e.g. Punta Cana = biggest college crowd + our staff on site) and ask what vibe they're going for",
+          violations: [...violations, 'destination_lumping'],
+        };
+      }
+    } else {
+      const before = text;
+      text = text
+        .replace(/\bthose are both\b/gi, 'those are all')
+        .replace(/\bthey'?re both\b/gi, 'theyre all')
+        .replace(/\bboth are (a vibe|solid|great|lit|dope|fire|good options|great options)\b/gi, 'theyre all $1')
+        .replace(/\byea,?\s+both\b(?=[^.?!]*\b(vibe|solid|great|lit|dope|fire|option)\b)/gi, 'yea theyre all');
+      if (text !== before) violations.push('destination_both_to_all');
+    }
   }
 
   // 3. Strip emoji anywhere. Spiffy uses zero.
@@ -478,8 +494,9 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
   //     phrase, reject (force Spiffy to find another beat).
   if (input.priorAssistantMessages && input.priorAssistantMessages.length > 0) {
     for (const tell of AI_TELL_PATTERNS) {
-      if (tell.rx.test(text)) {
-        const priorUsed = input.priorAssistantMessages.some((m) => tell.rx.test(m));
+      const rx = input.persona === 'meghan' && tell.meghanRx ? tell.meghanRx : tell.rx;
+      if (rx.test(text)) {
+        const priorUsed = input.priorAssistantMessages.some((m) => rx.test(m));
         if (priorUsed) {
           return {
             ok: false,
@@ -617,7 +634,9 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
       if (!hasExplicitNo) {
         return {
           ok: false,
-          reason: 'bot/real polarity: lead asked "are you a bot?" — reply must include an explicit "no" / "Im real" denial. Required phrasing: "no lol, Im real. been doing this for a few years now. if you wanna set up a call just lmk"',
+          reason: input.persona === 'meghan'
+            ? 'bot/real polarity: lead asked "are you a bot?" — reply must include an explicit no. Required shape: "No, I\'m real! I\'ve been helping groups with these trips for years. Happy to hop on a call if that\'s easier :)"'
+            : 'bot/real polarity: lead asked "are you a bot?" — reply must include an explicit "no" / "Im real" denial. Required phrasing: "no lol, Im real. been doing this for a few years now. if you wanna set up a call just lmk"',
           violations: [...violations, 'bot_polarity_missing_no'],
         };
       }
@@ -680,7 +699,7 @@ export function applyGuardrail(input: GuardrailInput): GuardrailResult {
   //     length range and shouldn't be subject to rhythm variance.
   //     Same exception for explicit commit-driven moments where the
   //     prompt mandates a structured reply.
-  const COMMIT_SIGNAL = /\b(?:lets do it|lets run it|im in|im down|send the link|lock it in|ready to book|how do we book|how do we lock|im ready|were ready|we're ready|lets go|lock me in)\b/i;
+  const COMMIT_SIGNAL = /\b(?:let'?s do it|let'?s run it|i'?m in|i'?m down|send the link|lock it in|ready to book|how do we book|how do we lock|i'?m ready|we'?re? ready|let'?s go|lock me in)\b/i;
   const isCommitMoment = input.inboundText ? COMMIT_SIGNAL.test(input.inboundText) : false;
   if (input.priorAssistantLengths && input.priorAssistantLengths.length >= 2 && !isCommitMoment) {
     const recent = input.priorAssistantLengths.slice(-2);

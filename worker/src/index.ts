@@ -5,6 +5,7 @@
  */
 
 import { handleInboundSms, handleInternalDrain } from './routes/webhook';
+import { personaKey } from './prompts/persona';
 import { handleSimulate } from './routes/simulate';
 import { classifyConversationContext } from './integrations/ghl';
 import type { MiaState } from './memory/ContactThread';
@@ -17,7 +18,7 @@ export default {
     const url = new URL(req.url);
     try {
       if (req.method === 'GET' && url.pathname === '/health') {
-        return Response.json({ ok: true, service: 'gbt-spiffy', ts: Date.now(), debounce: env.DEBOUNCE_ENABLED === '1' || env.DEBOUNCE_ENABLED === 'true' });
+        return Response.json({ ok: true, service: `gbt-${personaKey(env)}`, persona: personaKey(env), ts: Date.now(), debounce: env.DEBOUNCE_ENABLED === '1' || env.DEBOUNCE_ENABLED === 'true' });
       }
       // Internal: the DO debounce alarm hands the drain off here (NOT GHL).
       // Guarded by INTERNAL_DRAIN_SECRET. Acks fast; drains in ctx.waitUntil.
